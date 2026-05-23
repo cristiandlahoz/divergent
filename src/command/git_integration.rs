@@ -10,11 +10,14 @@ use crate::error::LumenError;
 use crate::vcs::VcsBackend;
 
 const PAGER_KEY: &str = "pager.diff";
+const CORE_PAGER_KEY: &str = "core.pager";
+
 pub fn execute(command: GitCommand) -> Result<(), LumenError> {
     match command {
         GitCommand::Install { force, binary } => install(binary, force),
         GitCommand::Uninstall => uninstall(),
         GitCommand::Status => status(),
+        GitCommand::Doctor => doctor(),
     }
 }
 
@@ -33,6 +36,7 @@ pub fn install(binary: Option<PathBuf>, force: bool) -> Result<(), LumenError> {
 
     write_pager_value(None, &managed_pager_command(&binary))?;
     println!("installed divergent as the global git diff pager");
+    print_env_warning();
     Ok(())
 }
 
@@ -60,6 +64,35 @@ pub fn status() -> Result<(), LumenError> {
         Some(value) => println!("conflict: {} is '{}'", PAGER_KEY, value),
         None => println!("not installed"),
     }
+    print_env_warning();
+    Ok(())
+}
+
+pub fn doctor() -> Result<(), LumenError> {
+    let pager_diff = read_pager_value(None)?;
+    let core_pager = read_global_value(CORE_PAGER_KEY, None)?;
+    let git_pager = std::env::var("GIT_PAGER").ok();
+    let pager = std::env::var("PAGER").ok();
+    let env_conflicts = env_pager_conflicts(git_pager.as_deref(), pager.as_deref());
+
+    println!(
+        "pager.diff: {}",
+        pager_diff.as_deref().unwrap_or("<not set>")
+    );
+    println!(
+        "core.pager: {}",
+        core_pager.as_deref().unwrap_or("<not set>")
+    );
+    println!("GIT_PAGER: {}", git_pager.as_deref().unwrap_or("<not set>"));
+    println!("PAGER: {}", pager.as_deref().unwrap_or("<not set>"));
+    println!(
+        "divergent pager.diff: {}",
+        pager_diff.as_deref().is_some_and(is_managed)
+    );
+    println!("env may bypass paging: {}", !env_conflicts.is_empty());
+    for conflict in env_conflicts {
+        println!("warning: {}", conflict);
+    }
     Ok(())
 }
 
@@ -80,7 +113,7 @@ pub fn run_pager(
 
 fn managed_pager_command(binary: &Path) -> String {
     format!(
-        "sh -c 'tmp=\"${{TMPDIR:-/tmp}}/divergent-git-pager-$$.diff\"; cat > \"$tmp\"; if [ -e /dev/tty ]; then exec \"$0\" git-pager --patch-file \"$tmp\" < /dev/tty > /dev/tty 2> /dev/tty; else exec \"$0\" git-pager --patch-file \"$tmp\"; fi' {}",
+        "sh -c 'tmp=$(mktemp \"${{TMPDIR:-/tmp}}/divergent-git-pager.XXXXXX\") || exit 1; trap \"rm -f \\\"$tmp\\\"\" EXIT HUP INT TERM; cat > \"$tmp\"; if [ -r /dev/tty ] && [ -w /dev/tty ]; then exec \"$0\" git-pager --patch-file \"$tmp\" < /dev/tty > /dev/tty 2> /dev/tty; else exec \"$0\" git-pager --patch-file \"$tmp\"; fi' {}",
         shell_quote(binary.as_os_str())
     )
 }
@@ -107,8 +140,15 @@ fn is_managed(value: &str) -> bool {
 }
 
 fn read_pager_value(git_config_global: Option<&Path>) -> Result<Option<String>, LumenError> {
+    read_global_value(PAGER_KEY, git_config_global)
+}
+
+fn read_global_value(
+    key: &str,
+    git_config_global: Option<&Path>,
+) -> Result<Option<String>, LumenError> {
     let output = git_command(git_config_global)
-        .args(["config", "--global", "--get", PAGER_KEY])
+        .args(["config", "--global", "--get", key])
         .output()?;
     if output.status.success() {
         let value = String::from_utf8(output.stdout)?.trim().to_string();
@@ -116,6 +156,39 @@ fn read_pager_value(git_config_global: Option<&Path>) -> Result<Option<String>, 
     } else {
         Ok(None)
     }
+}
+
+fn print_env_warning() {
+    for conflict in env_pager_conflicts(
+        std::env::var("GIT_PAGER").ok().as_deref(),
+        std::env::var("PAGER").ok().as_deref(),
+    ) {
+        eprintln!("\x1b[33mwarning:\x1b[0m {}", conflict);
+    }
+}
+
+fn env_pager_conflicts(git_pager: Option<&str>, pager: Option<&str>) -> Vec<String> {
+    let mut conflicts = Vec::new();
+    if let Some(value) = git_pager.filter(|value| is_conflicting_pager_value(value)) {
+        conflicts.push(format!(
+            "GIT_PAGER='{}' can override Git pager config; unset it when using Divergent",
+            value
+        ));
+    }
+    if let Some(value) = pager.filter(|value| is_conflicting_pager_value(value)) {
+        conflicts.push(format!(
+            "PAGER='{}' can affect Git pager selection; unset it if git diff bypasses Divergent",
+            value
+        ));
+    }
+    conflicts
+}
+
+fn is_conflicting_pager_value(value: &str) -> bool {
+    let value = value.trim().to_ascii_lowercase();
+    !value.is_empty()
+        && !value.contains("divergent")
+        && (value == "cat" || value == "less" || value.contains("hunk") || value.contains("delta"))
 }
 
 fn write_pager_value(git_config_global: Option<&Path>, value: &str) -> Result<(), LumenError> {
@@ -295,6 +368,24 @@ mod tests {
         let value = read_pager_value(Some(config.path())).unwrap().unwrap();
         assert!(is_managed(&value));
         assert!(value.contains("/tmp/divergent"));
+    }
+
+    #[test]
+    fn managed_pager_command_uses_tty_tempfile_and_cleanup() {
+        let command = managed_pager_command(Path::new("/tmp/divergent"));
+        assert!(command.contains("mktemp"));
+        assert!(command.contains("trap"));
+        assert!(command.contains("/dev/tty"));
+        assert!(command.contains("--patch-file"));
+    }
+
+    #[test]
+    fn env_conflicts_detect_cat_hunk_and_delta() {
+        let conflicts = env_pager_conflicts(Some("cat"), Some("hunk pager"));
+        assert_eq!(conflicts.len(), 2);
+
+        let conflicts = env_pager_conflicts(Some("delta --color-only"), Some("divergent"));
+        assert_eq!(conflicts.len(), 1);
     }
 
     #[test]

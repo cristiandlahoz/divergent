@@ -796,6 +796,90 @@ impl AppState {
         self.focused_hunk = if hunks.is_empty() { None } else { Some(0) };
     }
 
+    pub fn select_next_visible_file(&mut self) -> bool {
+        if self.file_diffs.is_empty() {
+            return false;
+        }
+
+        let mut next = self.sidebar_selected.saturating_add(1);
+        while next < self.sidebar_visible_len() {
+            if let Some(SidebarItem::File { file_index, .. }) =
+                self.sidebar_item_at_visible(next).cloned()
+            {
+                self.sidebar_selected = next;
+                self.select_file(file_index);
+                return true;
+            }
+            next += 1;
+        }
+        false
+    }
+
+    pub fn select_previous_visible_file(&mut self) -> bool {
+        if self.file_diffs.is_empty() || self.sidebar_selected == 0 {
+            return false;
+        }
+
+        let mut prev = self.sidebar_selected - 1;
+        loop {
+            if let Some(SidebarItem::File { file_index, .. }) =
+                self.sidebar_item_at_visible(prev).cloned()
+            {
+                self.sidebar_selected = prev;
+                self.select_file(file_index);
+                return true;
+            }
+            if prev == 0 {
+                return false;
+            }
+            prev -= 1;
+        }
+    }
+
+    pub fn focus_next_hunk(&mut self, visible_height: usize, max_scroll: usize) -> bool {
+        let hunks = self.get_hunks().to_vec();
+        if hunks.is_empty() {
+            return false;
+        }
+
+        self.clear_selection();
+        let current_hunk = self.focused_hunk.unwrap_or(0);
+        let next_hunk = if self.focused_hunk.is_none() {
+            hunks
+                .iter()
+                .position(|&h| h > self.scroll as usize + 5)
+                .unwrap_or(0)
+        } else {
+            (current_hunk + 1).min(hunks.len().saturating_sub(1))
+        };
+        self.focused_hunk = Some(next_hunk);
+        self.scroll =
+            adjust_scroll_for_hunk(hunks[next_hunk], self.scroll, visible_height, max_scroll);
+        true
+    }
+
+    pub fn focus_previous_hunk(&mut self, visible_height: usize, max_scroll: usize) -> bool {
+        let hunks = self.get_hunks().to_vec();
+        if hunks.is_empty() {
+            return false;
+        }
+
+        self.clear_selection();
+        let current_hunk = self.focused_hunk.unwrap_or(hunks.len());
+        let prev_hunk = if self.focused_hunk.is_none() {
+            hunks
+                .iter()
+                .rposition(|&h| (h as u16) < self.scroll.saturating_sub(5))
+                .unwrap_or(hunks.len().saturating_sub(1))
+        } else {
+            current_hunk.saturating_sub(1)
+        };
+        self.focused_hunk = Some(prev_hunk);
+        self.scroll =
+            adjust_scroll_for_hunk(hunks[prev_hunk], self.scroll, visible_height, max_scroll);
+        true
+    }
+
     /// Get annotation by id
     pub fn get_annotation_by_id(&self, id: u64) -> Option<&Annotation> {
         self.annotations.iter().find(|a| a.id == id)
@@ -962,6 +1046,26 @@ mod tests {
         }
     }
 
+    fn make_modified_file_diff(filename: &str) -> FileDiff {
+        FileDiff {
+            filename: filename.to_string(),
+            old_content: (1..=24)
+                .map(|n| format!("line {n}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            new_content: (1..=24)
+                .map(|n| match n {
+                    2 => "changed 2".to_string(),
+                    20 => "changed 20".to_string(),
+                    _ => format!("line {n}"),
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            status: FileStatus::Modified,
+            is_binary: false,
+        }
+    }
+
     #[test]
     fn test_focus_selects_matching_file() {
         let diffs = vec![
@@ -1034,5 +1138,35 @@ mod tests {
         assert_eq!(state.diff_layout, DiffLayout::Stack);
         assert!(state.search_dirty);
         assert!(!state.selection.is_active());
+    }
+
+    #[test]
+    fn visible_file_navigation_moves_between_files() {
+        let mut state = AppState::new(
+            vec![
+                make_file_diff("aaa.rs"),
+                make_file_diff("bbb.rs"),
+                make_file_diff("ccc.rs"),
+            ],
+            None,
+        );
+
+        assert_eq!(state.file_diffs[state.current_file].filename, "aaa.rs");
+        assert!(state.select_next_visible_file());
+        assert_eq!(state.file_diffs[state.current_file].filename, "bbb.rs");
+        assert!(state.select_previous_visible_file());
+        assert_eq!(state.file_diffs[state.current_file].filename, "aaa.rs");
+    }
+
+    #[test]
+    fn hunk_navigation_updates_focused_hunk_and_scroll() {
+        let mut state = AppState::new(vec![make_modified_file_diff("src/main.rs")], None);
+        state.focused_hunk = Some(0);
+
+        assert!(state.focus_next_hunk(8, 100));
+        assert_eq!(state.focused_hunk, Some(1));
+
+        assert!(state.focus_previous_hunk(8, 100));
+        assert_eq!(state.focused_hunk, Some(0));
     }
 }

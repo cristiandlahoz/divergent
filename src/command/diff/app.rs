@@ -22,7 +22,7 @@ use super::render::{
     render_diff, render_empty_state, truncate_path, FilePickerItem, KeyBind, KeyBindSection, Modal,
     ModalContent, ModalFileStatus, ModalResult,
 };
-use super::state::{adjust_scroll_for_hunk, adjust_scroll_to_line, AppState, PendingKey};
+use super::state::{adjust_scroll_to_line, AppState, PendingKey};
 use super::theme;
 use super::types::{
     stack_rows_for_viewport, ChangeType, CursorPosition, DiffFullscreen, DiffLayout,
@@ -109,6 +109,19 @@ fn format_annotation_preview(annotation: &super::state::Annotation) -> String {
             annotation.format_time()
         )
     }
+}
+
+fn restore_terminal() {
+    let _ = io::stdout().execute(DisableMouseCapture);
+    let _ = disable_raw_mode();
+    let _ = io::stdout().execute(LeaveAlternateScreen);
+}
+
+fn input_reader_error(error: io::Error) -> io::Error {
+    io::Error::other(format!(
+        "Divergent could not read terminal input. If this happened from `git diff`, run `divergent git doctor` and unset conflicting GIT_PAGER/PAGER values. Original error: {}",
+        error
+    ))
 }
 
 pub fn run_app_with_pr(
@@ -438,8 +451,21 @@ fn run_app_internal(
         }
 
         // Poll for new events if no pending events
-        if pending_events.is_empty() && event::poll(Duration::from_millis(100))? {
-            pending_events.push_back(event::read()?);
+        if pending_events.is_empty() {
+            match event::poll(Duration::from_millis(100)) {
+                Ok(true) => match event::read() {
+                    Ok(event) => pending_events.push_back(event),
+                    Err(error) => {
+                        restore_terminal();
+                        return Err(input_reader_error(error));
+                    }
+                },
+                Ok(false) => {}
+                Err(error) => {
+                    restore_terminal();
+                    return Err(input_reader_error(error));
+                }
+            }
         }
 
         // Process all pending events
@@ -1103,45 +1129,33 @@ fn run_app_internal(
                                 state.focused_panel = FocusedPanel::DiffView;
                             }
                         }
+                        KeyCode::Char('J')
+                            if !state.file_diffs.is_empty() && state.select_next_visible_file() =>
+                        {
+                            let visible_height = terminal.size()?.height.saturating_sub(5) as usize;
+                            ensure_sidebar_visible(&mut state, visible_height);
+                        }
+                        KeyCode::Char('K')
+                            if !state.file_diffs.is_empty()
+                                && state.select_previous_visible_file() =>
+                        {
+                            ensure_sidebar_visible(&mut state, usize::MAX);
+                        }
                         KeyCode::Char('j')
                             if key.modifiers.contains(KeyModifiers::CONTROL)
-                                && !state.file_diffs.is_empty() =>
+                                && !state.file_diffs.is_empty()
+                                && state.select_next_visible_file() =>
                         {
-                            let mut next = state.sidebar_selected + 1;
-                            while next < state.sidebar_visible_len() {
-                                if let Some(SidebarItem::File { file_index, .. }) =
-                                    state.sidebar_item_at_visible(next).cloned()
-                                {
-                                    state.sidebar_selected = next;
-                                    state.select_file(file_index);
-                                    let visible_height =
-                                        terminal.size()?.height.saturating_sub(5) as usize;
-                                    ensure_sidebar_visible(&mut state, visible_height);
-                                    break;
-                                }
-                                next += 1;
-                            }
+                            let visible_height = terminal.size()?.height.saturating_sub(5) as usize;
+                            ensure_sidebar_visible(&mut state, visible_height);
                         }
                         KeyCode::Char('k')
                             if key.modifiers.contains(KeyModifiers::CONTROL)
                                 && !state.file_diffs.is_empty()
-                                && state.sidebar_selected > 0 =>
+                                && state.sidebar_selected > 0
+                                && state.select_previous_visible_file() =>
                         {
-                            let mut prev = state.sidebar_selected - 1;
-                            loop {
-                                if let Some(SidebarItem::File { file_index, .. }) =
-                                    state.sidebar_item_at_visible(prev).cloned()
-                                {
-                                    state.sidebar_selected = prev;
-                                    state.select_file(file_index);
-                                    ensure_sidebar_visible(&mut state, usize::MAX);
-                                    break;
-                                }
-                                if prev == 0 {
-                                    break;
-                                }
-                                prev -= 1;
-                            }
+                            ensure_sidebar_visible(&mut state, usize::MAX);
                         }
                         // Stacked mode: navigate to next commit
                         KeyCode::Char('l')
@@ -1196,31 +1210,11 @@ fn run_app_internal(
                         KeyCode::Char('s') => {
                             state.toggle_diff_layout();
                         }
-                        KeyCode::Char(']')
-                            if state.diff_layout == DiffLayout::Split
-                                && !state.file_diffs.is_empty() =>
-                        {
-                            let diff = &state.file_diffs[state.current_file];
-                            if !diff.new_content.is_empty() {
-                                state.diff_fullscreen = match state.diff_fullscreen {
-                                    DiffFullscreen::NewOnly => DiffFullscreen::None,
-                                    _ => DiffFullscreen::NewOnly,
-                                };
-                                state.mark_search_dirty();
-                            }
+                        KeyCode::Char(']') if !state.file_diffs.is_empty() => {
+                            state.focus_next_hunk(visible_height, max_scroll);
                         }
-                        KeyCode::Char('[')
-                            if state.diff_layout == DiffLayout::Split
-                                && !state.file_diffs.is_empty() =>
-                        {
-                            let diff = &state.file_diffs[state.current_file];
-                            if !diff.old_content.is_empty() {
-                                state.diff_fullscreen = match state.diff_fullscreen {
-                                    DiffFullscreen::OldOnly => DiffFullscreen::None,
-                                    _ => DiffFullscreen::OldOnly,
-                                };
-                                state.mark_search_dirty();
-                            }
+                        KeyCode::Char('[') if !state.file_diffs.is_empty() => {
+                            state.focus_previous_hunk(visible_height, max_scroll);
                         }
                         KeyCode::Char('=') if state.diff_layout == DiffLayout::Split => {
                             state.diff_fullscreen = DiffFullscreen::None;
@@ -1470,48 +1464,10 @@ fn run_app_internal(
                             state.scroll = state.scroll.saturating_sub(20);
                         }
                         KeyCode::Char('}') if !state.file_diffs.is_empty() => {
-                            state.clear_selection(); // Clear selection on hunk navigation
-                            let hunks = state.get_hunks().to_vec();
-                            let current_hunk = state.focused_hunk.unwrap_or(0);
-                            let next_hunk = if state.focused_hunk.is_none() {
-                                hunks
-                                    .iter()
-                                    .position(|&h| h > state.scroll as usize + 5)
-                                    .unwrap_or(0)
-                            } else {
-                                (current_hunk + 1).min(hunks.len().saturating_sub(1))
-                            };
-                            if !hunks.is_empty() {
-                                state.focused_hunk = Some(next_hunk);
-                                state.scroll = adjust_scroll_for_hunk(
-                                    hunks[next_hunk],
-                                    state.scroll,
-                                    visible_height,
-                                    max_scroll,
-                                );
-                            }
+                            state.focus_next_hunk(visible_height, max_scroll);
                         }
                         KeyCode::Char('{') if !state.file_diffs.is_empty() => {
-                            state.clear_selection(); // Clear selection on hunk navigation
-                            let hunks = state.get_hunks().to_vec();
-                            let current_hunk = state.focused_hunk.unwrap_or(hunks.len());
-                            let prev_hunk = if state.focused_hunk.is_none() {
-                                hunks
-                                    .iter()
-                                    .rposition(|&h| (h as u16) < state.scroll.saturating_sub(5))
-                                    .unwrap_or(hunks.len().saturating_sub(1))
-                            } else {
-                                current_hunk.saturating_sub(1)
-                            };
-                            if !hunks.is_empty() {
-                                state.focused_hunk = Some(prev_hunk);
-                                state.scroll = adjust_scroll_for_hunk(
-                                    hunks[prev_hunk],
-                                    state.scroll,
-                                    visible_height,
-                                    max_scroll,
-                                );
-                            }
+                            state.focus_previous_hunk(visible_height, max_scroll);
                         }
                         KeyCode::Char('i') if !state.file_diffs.is_empty() => {
                             let file_index = state.current_file;
@@ -1757,7 +1713,7 @@ fn run_app_internal(
                                                 description: "Focus sidebar / diff",
                                             },
                                             KeyBind {
-                                                key: "ctrl+j / ctrl+k",
+                                                key: "J / K",
                                                 description: "Next / previous file",
                                             },
                                             KeyBind {
@@ -1832,8 +1788,12 @@ fn run_app_internal(
                                                 description: "Scroll to top / bottom",
                                             },
                                             KeyBind {
-                                                key: "{ / }",
+                                                key: "[ / ]",
                                                 description: "Focus prev / next hunk",
+                                            },
+                                            KeyBind {
+                                                key: "{ / }",
+                                                description: "Prev / next hunk (legacy)",
                                             },
                                             KeyBind {
                                                 key: "pageup / pagedown",

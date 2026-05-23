@@ -267,6 +267,8 @@ pub fn render_footer(frame: &mut Frame, footer_area: Rect, data: FooterData) {
                         .fg(t.ui.footer_branch_fg)
                         .bg(t.ui.footer_branch_bg),
                 ),
+                Span::styled(" J/K files ", Style::default().fg(t.ui.text_muted).bg(bg)),
+                Span::styled(" [/ ] hunks ", Style::default().fg(t.ui.text_muted).bg(bg)),
                 Span::styled(" ", Style::default().bg(bg)),
                 Span::styled(" ? help ", Style::default().fg(t.ui.text_muted).bg(bg)),
             ]

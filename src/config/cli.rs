@@ -167,6 +167,8 @@ pub enum GitCommand {
     Uninstall,
     /// Show whether global git diff is managed by Divergent.
     Status,
+    /// Explain whether Git will actually route diffs through Divergent.
+    Doctor,
 }
 
 #[cfg(test)]
