@@ -6,7 +6,7 @@ use crate::command::diff::highlight::FileHighlighter;
 
 use crate::command::diff::search::SearchState;
 use crate::command::diff::types::{
-    build_file_tree, CursorPosition, DiffFullscreen, DiffLine, DiffPanelFocus,
+    build_file_tree, CursorPosition, DiffFullscreen, DiffLayout, DiffLine, DiffPanelFocus,
     DiffViewSettings, FileDiff, FocusedPanel, Selection, SelectionMode, SidebarItem,
 };
 use crate::vcs::StackedCommitInfo;
@@ -105,7 +105,10 @@ impl Annotation {
     #[cfg(not(feature = "jj"))]
     pub fn format_time(&self) -> String {
         use std::time::UNIX_EPOCH;
-        let duration = self.created_at.duration_since(UNIX_EPOCH).unwrap_or_default();
+        let duration = self
+            .created_at
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
         let secs = duration.as_secs();
         let hours = (secs / 3600) % 24;
         let minutes = (secs / 60) % 60;
@@ -128,7 +131,11 @@ impl Annotation {
     pub fn line_range_display(&self) -> String {
         match &self.target {
             AnnotationTarget::File => String::new(),
-            AnnotationTarget::LineRange { start_line, end_line, .. } => {
+            AnnotationTarget::LineRange {
+                start_line,
+                end_line,
+                ..
+            } => {
                 if start_line == end_line {
                     format!("L{}", start_line)
                 } else {
@@ -154,6 +161,7 @@ pub struct AppState {
     pub viewed_files: HashSet<usize>,
     pub show_sidebar: bool,
     pub settings: DiffViewSettings,
+    pub diff_layout: DiffLayout,
     pub diff_fullscreen: DiffFullscreen,
     pub search_state: SearchState,
     pub pending_key: PendingKey,
@@ -257,6 +265,7 @@ impl AppState {
             viewed_files: HashSet::new(),
             show_sidebar: true,
             settings,
+            diff_layout: DiffLayout::default(),
             diff_fullscreen: DiffFullscreen::default(),
             search_state: SearchState::default(),
             pending_key: PendingKey::default(),
@@ -382,7 +391,8 @@ impl AppState {
                 Some((_, data)) => data.as_slice(),
                 None => &[],
             };
-            self.search_state.update_matches(sbs, self.diff_fullscreen);
+            self.search_state
+                .update_matches(sbs, self.diff_fullscreen, self.diff_layout);
             self.search_dirty = false;
         }
     }
@@ -390,6 +400,12 @@ impl AppState {
     /// Mark search matches as needing recomputation
     pub fn mark_search_dirty(&mut self) {
         self.search_dirty = true;
+    }
+
+    pub fn toggle_diff_layout(&mut self) {
+        self.diff_layout = self.diff_layout.toggled();
+        self.clear_selection();
+        self.mark_search_dirty();
     }
 
     /// Get the cached total line count for the current file.
@@ -486,7 +502,12 @@ impl AppState {
     }
 
     /// Start a new selection
-    pub fn start_selection(&mut self, panel: DiffPanelFocus, pos: CursorPosition, mode: SelectionMode) {
+    pub fn start_selection(
+        &mut self,
+        panel: DiffPanelFocus,
+        pos: CursorPosition,
+        mode: SelectionMode,
+    ) {
         self.diff_panel_focus = panel;
         self.selection = Selection {
             panel,
@@ -715,8 +736,13 @@ impl AppState {
         self.sidebar_items = build_file_tree(&self.file_diffs);
 
         // Retain annotations whose file still exists
-        let filenames: HashSet<&str> = self.file_diffs.iter().map(|f| f.filename.as_str()).collect();
-        self.annotations.retain(|ann| filenames.contains(ann.filename.as_str()));
+        let filenames: HashSet<&str> = self
+            .file_diffs
+            .iter()
+            .map(|f| f.filename.as_str())
+            .collect();
+        self.annotations
+            .retain(|ann| filenames.contains(ann.filename.as_str()));
 
         // Convert viewed filenames back to indices in the new file_diffs
         self.viewed_files = self
@@ -785,7 +811,13 @@ impl AppState {
     }
 
     /// Add a new annotation, returns its id
-    pub fn add_annotation(&mut self, filename: String, target: AnnotationTarget, content: String, created_at: SystemTime) -> u64 {
+    pub fn add_annotation(
+        &mut self,
+        filename: String,
+        target: AnnotationTarget,
+        content: String,
+        created_at: SystemTime,
+    ) -> u64 {
         let id = self.annotation_next_id;
         self.annotation_next_id += 1;
         self.annotations.push(Annotation {
@@ -831,7 +863,12 @@ impl AppState {
                 AnnotationTarget::File => {
                     result.push_str(&format!("**{}**\n\n", ann.filename));
                 }
-                AnnotationTarget::LineRange { panel, start_line, end_line, .. } => {
+                AnnotationTarget::LineRange {
+                    panel,
+                    start_line,
+                    end_line,
+                    ..
+                } => {
                     let side = match panel {
                         DiffPanelFocus::Old => "LEFT",
                         _ => "RIGHT",
@@ -968,7 +1005,9 @@ mod tests {
 
         let state = AppState::new(diffs, Some("ccc.rs"));
 
-        if let Some(SidebarItem::File { file_index, .. }) = state.sidebar_item_at_visible(state.sidebar_selected) {
+        if let Some(SidebarItem::File { file_index, .. }) =
+            state.sidebar_item_at_visible(state.sidebar_selected)
+        {
             assert_eq!(*file_index, state.current_file);
         } else {
             panic!("sidebar_selected should point to a file");
@@ -983,5 +1022,17 @@ mod tests {
 
         assert_eq!(state.current_file, 0);
         assert!(state.file_diffs.is_empty());
+    }
+
+    #[test]
+    fn toggling_diff_layout_flips_layout_and_marks_search_dirty() {
+        let mut state = AppState::new(vec![make_file_diff("src/main.rs")], None);
+        state.search_dirty = false;
+
+        state.toggle_diff_layout();
+
+        assert_eq!(state.diff_layout, DiffLayout::Stack);
+        assert!(state.search_dirty);
+        assert!(!state.selection.is_active());
     }
 }

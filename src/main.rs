@@ -34,14 +34,6 @@ async fn run() -> Result<(), LumenError> {
         Err(e) => return Err(e),
     };
 
-    let provider = provider::LumenProvider::new(config.provider, config.api_key, config.model)?;
-    let command = command::LumenCommand::new(provider);
-
-    // Get VCS backend based on CLI override or auto-detection
-    let cwd = std::env::current_dir()?;
-    let vcs_override = cli.vcs.map(VcsBackendType::from);
-    let backend = vcs::get_backend(&cwd, vcs_override)?;
-
     match cli.command {
         Commands::Explain {
             reference,
@@ -49,6 +41,10 @@ async fn run() -> Result<(), LumenError> {
             query,
             list,
         } => {
+            let provider =
+                provider::LumenProvider::new(config.provider, config.api_key, config.model)?;
+            let command = command::LumenCommand::new(provider);
+            let backend = selected_backend(cli.vcs)?;
             let git_entity = if list {
                 let sha = LumenCommand::get_sha_from_fzf(backend.as_ref())?;
                 let info = backend.get_commit(&sha)?;
@@ -85,6 +81,10 @@ async fn run() -> Result<(), LumenError> {
                 .await?;
         }
         Commands::List => {
+            let provider =
+                provider::LumenProvider::new(config.provider, config.api_key, config.model)?;
+            let command = command::LumenCommand::new(provider);
+            let backend = selected_backend(cli.vcs)?;
             eprintln!("Warning: 'lumen list' is deprecated. Use 'lumen explain --list' instead.");
             command
                 .execute(command::CommandType::List {
@@ -93,6 +93,10 @@ async fn run() -> Result<(), LumenError> {
                 .await?
         }
         Commands::Draft { context } => {
+            let provider =
+                provider::LumenProvider::new(config.provider, config.api_key, config.model)?;
+            let command = command::LumenCommand::new(provider);
+            let backend = selected_backend(cli.vcs)?;
             // Draft always uses staged diff (git convention)
             let diff = backend.get_working_tree_diff(true)?;
             let git_entity = GitEntity::Diff(Diff::from_working_tree_diff(diff, true)?);
@@ -105,6 +109,9 @@ async fn run() -> Result<(), LumenError> {
                 .await?
         }
         Commands::Operate { query } => {
+            let provider =
+                provider::LumenProvider::new(config.provider, config.api_key, config.model)?;
+            let command = command::LumenCommand::new(provider);
             command
                 .execute(command::CommandType::Operate { query })
                 .await?;
@@ -118,6 +125,7 @@ async fn run() -> Result<(), LumenError> {
             stacked,
             focus,
         } => {
+            let backend = selected_backend(cli.vcs)?;
             let options = command::diff::DiffOptions {
                 reference,
                 pr,
@@ -129,12 +137,37 @@ async fn run() -> Result<(), LumenError> {
             };
             command::diff::run_diff_ui(options, backend.as_ref())?;
         }
+        Commands::Git { command } => {
+            command::git_integration::execute(command)?;
+        }
+        Commands::GitPager => {
+            let backend = selected_backend(cli.vcs)?;
+            let options = command::diff::DiffOptions {
+                reference: None,
+                pr: None,
+                file: None,
+                watch: false,
+                theme: config.theme.clone(),
+                stacked: false,
+                focus: None,
+            };
+            let mut stdin = std::io::stdin();
+            command::git_integration::run_pager(options, backend.as_ref(), &mut stdin)?;
+        }
         Commands::Configure => {
             command::configure::ConfigureCommand::execute()?;
         }
     }
 
     Ok(())
+}
+
+fn selected_backend(
+    vcs_override: Option<config::cli::VcsOverride>,
+) -> Result<Box<dyn vcs::VcsBackend>, LumenError> {
+    let cwd = std::env::current_dir()?;
+    let vcs_override = vcs_override.map(VcsBackendType::from);
+    Ok(vcs::get_backend(&cwd, vcs_override)?)
 }
 
 fn read_from_stdin() -> Result<String, LumenError> {

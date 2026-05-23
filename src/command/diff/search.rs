@@ -1,4 +1,4 @@
-use super::types::{DiffFullscreen, DiffLine};
+use super::types::{ChangeType, DiffFullscreen, DiffLayout, DiffLine};
 
 #[derive(Default, Clone, Copy, PartialEq)]
 pub enum SearchMode {
@@ -70,7 +70,12 @@ impl SearchState {
         !self.query.is_empty()
     }
 
-    pub fn update_matches(&mut self, lines: &[DiffLine], fullscreen: DiffFullscreen) {
+    pub fn update_matches(
+        &mut self,
+        lines: &[DiffLine],
+        fullscreen: DiffFullscreen,
+        layout: DiffLayout,
+    ) {
         if self.query.is_empty() {
             self.matches.clear();
             self.current_match = None;
@@ -89,40 +94,87 @@ impl SearchState {
         let query_len = self.query.len();
 
         for (i, line) in lines.iter().enumerate() {
-            // Find all occurrences in old panel
-            if !matches!(fullscreen, DiffFullscreen::NewOnly) {
-                if let Some((_, text)) = &line.old_line {
-                    let text_lower = text.to_lowercase();
-                    let mut start = 0;
-                    while let Some(pos) = text_lower[start..].find(&query_lower) {
-                        let abs_pos = start + pos;
-                        self.matches.push(SearchMatch {
-                            line_index: i,
-                            start_col: abs_pos,
-                            end_col: abs_pos + query_len,
-                            panel: MatchPanel::Old,
-                        });
-                        start = abs_pos + 1;
-                    }
-                }
-            }
+            let scan_old = matches!(layout, DiffLayout::Stack)
+                || !matches!(fullscreen, DiffFullscreen::NewOnly);
+            let scan_new = matches!(layout, DiffLayout::Stack)
+                || !matches!(fullscreen, DiffFullscreen::OldOnly);
 
-            // Find all occurrences in new panel
-            if !matches!(fullscreen, DiffFullscreen::OldOnly) {
-                if let Some((_, text)) = &line.new_line {
-                    let text_lower = text.to_lowercase();
-                    let mut start = 0;
-                    while let Some(pos) = text_lower[start..].find(&query_lower) {
-                        let abs_pos = start + pos;
-                        self.matches.push(SearchMatch {
-                            line_index: i,
-                            start_col: abs_pos,
-                            end_col: abs_pos + query_len,
-                            panel: MatchPanel::New,
-                        });
-                        start = abs_pos + 1;
+            match layout {
+                DiffLayout::Split => {
+                    if scan_old {
+                        self.add_matches_for_text(
+                            i,
+                            MatchPanel::Old,
+                            line.old_line.as_ref().map(|(_, text)| text),
+                            &query_lower,
+                            query_len,
+                        );
+                    }
+                    if scan_new {
+                        self.add_matches_for_text(
+                            i,
+                            MatchPanel::New,
+                            line.new_line.as_ref().map(|(_, text)| text),
+                            &query_lower,
+                            query_len,
+                        );
                     }
                 }
+                DiffLayout::Stack => match line.change_type {
+                    ChangeType::Equal => {
+                        if let Some((_, text)) = &line.new_line {
+                            self.add_matches_for_text(
+                                i,
+                                MatchPanel::New,
+                                Some(text),
+                                &query_lower,
+                                query_len,
+                            );
+                        } else {
+                            self.add_matches_for_text(
+                                i,
+                                MatchPanel::Old,
+                                line.old_line.as_ref().map(|(_, text)| text),
+                                &query_lower,
+                                query_len,
+                            );
+                        }
+                    }
+                    ChangeType::Delete => {
+                        self.add_matches_for_text(
+                            i,
+                            MatchPanel::Old,
+                            line.old_line.as_ref().map(|(_, text)| text),
+                            &query_lower,
+                            query_len,
+                        );
+                    }
+                    ChangeType::Insert => {
+                        self.add_matches_for_text(
+                            i,
+                            MatchPanel::New,
+                            line.new_line.as_ref().map(|(_, text)| text),
+                            &query_lower,
+                            query_len,
+                        );
+                    }
+                    ChangeType::Modified => {
+                        self.add_matches_for_text(
+                            i,
+                            MatchPanel::Old,
+                            line.old_line.as_ref().map(|(_, text)| text),
+                            &query_lower,
+                            query_len,
+                        );
+                        self.add_matches_for_text(
+                            i,
+                            MatchPanel::New,
+                            line.new_line.as_ref().map(|(_, text)| text),
+                            &query_lower,
+                            query_len,
+                        );
+                    }
+                },
             }
         }
 
@@ -144,6 +196,31 @@ impl SearchState {
                     .position(|m| m.line_index >= line_idx)
                     .or(Some(0));
             }
+        }
+    }
+
+    fn add_matches_for_text(
+        &mut self,
+        line_index: usize,
+        panel: MatchPanel,
+        text: Option<&String>,
+        query_lower: &str,
+        query_len: usize,
+    ) {
+        let Some(text) = text else {
+            return;
+        };
+        let text_lower = text.to_lowercase();
+        let mut start = 0;
+        while let Some(pos) = text_lower[start..].find(query_lower) {
+            let abs_pos = start + pos;
+            self.matches.push(SearchMatch {
+                line_index,
+                start_col: abs_pos,
+                end_col: abs_pos + query_len,
+                panel,
+            });
+            start = abs_pos + 1;
         }
     }
 
@@ -215,5 +292,40 @@ impl SearchState {
                 (m.start_col, m.end_col, is_current)
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command::diff::types::InlineSegment;
+
+    fn diff_line(old: Option<&str>, new: Option<&str>, change_type: ChangeType) -> DiffLine {
+        DiffLine {
+            old_line: old.map(|text| (1, text.to_string())),
+            new_line: new.map(|text| (1, text.to_string())),
+            change_type,
+            old_segments: None::<Vec<InlineSegment>>,
+            new_segments: None::<Vec<InlineSegment>>,
+        }
+    }
+
+    #[test]
+    fn stack_search_includes_old_and_new_modified_text() {
+        let lines = vec![diff_line(
+            Some("old needle"),
+            Some("new needle"),
+            ChangeType::Modified,
+        )];
+        let mut state = SearchState {
+            query: "needle".to_string(),
+            ..SearchState::default()
+        };
+
+        state.update_matches(&lines, DiffFullscreen::NewOnly, DiffLayout::Stack);
+
+        assert_eq!(state.matches.len(), 2);
+        assert_eq!(state.matches[0].panel, MatchPanel::Old);
+        assert_eq!(state.matches[1].panel, MatchPanel::New);
     }
 }

@@ -4,6 +4,7 @@ use ratatui::{prelude::*, widgets::Paragraph};
 
 use crate::command::diff::search::{SearchMode, SearchState};
 use crate::command::diff::theme;
+use crate::command::diff::types::DiffLayout;
 use crate::command::diff::PrInfo;
 
 pub struct FooterData<'a> {
@@ -18,6 +19,7 @@ pub struct FooterData<'a> {
     pub hunk_count: usize,
     pub focused_hunk: Option<usize>,
     pub search_state: &'a SearchState,
+    pub diff_layout: DiffLayout,
     pub area_width: u16,
 }
 
@@ -203,7 +205,10 @@ pub fn render_footer(frame: &mut Frame, footer_area: Rect, data: FooterData) {
                 Span::styled(viewed_indicator, Style::default().fg(t.ui.viewed).bg(bg)),
             ];
             spans.extend(stats_spans);
-            spans.push(Span::styled(watch_indicator, Style::default().fg(t.ui.watching).bg(bg)));
+            spans.push(Span::styled(
+                watch_indicator,
+                Style::default().fg(t.ui.watching).bg(bg),
+            ));
             spans
         };
 
@@ -223,10 +228,7 @@ pub fn render_footer(frame: &mut Frame, footer_area: Rect, data: FooterData) {
                 format!("[0/0] /{} ", data.search_state.query)
             };
             vec![
-                Span::styled(
-                    search_info,
-                    Style::default().fg(t.ui.highlight).bg(bg),
-                ),
+                Span::styled(search_info, Style::default().fg(t.ui.highlight).bg(bg)),
                 Span::styled(
                     " n/N navigate ",
                     Style::default().fg(t.ui.text_muted).bg(bg),
@@ -260,9 +262,13 @@ pub fn render_footer(frame: &mut Frame, footer_area: Rect, data: FooterData) {
                     Style::default().fg(t.ui.text_muted).bg(bg),
                 ),
                 Span::styled(
-                    " ? help ",
-                    Style::default().fg(t.ui.text_muted).bg(bg),
+                    format!(" {} ", data.diff_layout.label()),
+                    Style::default()
+                        .fg(t.ui.footer_branch_fg)
+                        .bg(t.ui.footer_branch_bg),
                 ),
+                Span::styled(" ", Style::default().bg(bg)),
+                Span::styled(" ? help ", Style::default().fg(t.ui.text_muted).bg(bg)),
             ]
         };
 
@@ -277,10 +283,7 @@ pub fn render_footer(frame: &mut Frame, footer_area: Rect, data: FooterData) {
         let padding = footer_width.saturating_sub(left_len + right_len);
 
         let mut final_spans: Vec<Span> = left_line.spans;
-        final_spans.push(Span::styled(
-            " ".repeat(padding),
-            Style::default().bg(bg),
-        ));
+        final_spans.push(Span::styled(" ".repeat(padding), Style::default().bg(bg)));
         final_spans.extend(right_line.spans);
 
         let footer = Paragraph::new(Line::from(final_spans)).style(Style::default().bg(bg));

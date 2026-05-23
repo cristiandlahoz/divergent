@@ -39,10 +39,8 @@ pub fn extract_operate_response(ai_response: &str) -> Result<OperateResult, Extr
                 current_element = Some(name.local_name.clone());
                 current_text.clear();
             }
-            Ok(XmlEvent::Characters(text)) => {
-                if current_element.is_some() {
-                    current_text.push_str(&text);
-                }
+            Ok(XmlEvent::Characters(text)) if current_element.is_some() => {
+                current_text.push_str(&text);
             }
             Ok(XmlEvent::EndElement { name }) => {
                 if let Some(element) = &current_element {

@@ -1,12 +1,12 @@
 [package]
-name = "lumen"
+name = "divergent"
 version = "2.22.0"
 edition = "2021"
 license = "MIT"
-description = "lumen is a command-line tool that uses AI to generate commit messages, summarise git diffs or past commits, and more."
-keywords = ["cli", "terminal", "ai", "git", "commit"]
+description = "A fast terminal diff viewer for git and jj."
+keywords = ["cli", "terminal", "diff", "git", "jj"]
 categories = ["command-line-interface", "command-line-utilities"]
-repository = "https://github.com/jnsahaj/lumen"
+repository = "https://github.com/cristiandlahoz/divergent"
 
 [dependencies]
 clap = { version = "4.4", features = ["derive", "env"] }
@@ -44,11 +44,13 @@ tree-sitter-ruby = "0.23"
 tree-sitter-elixir = "0.3"
 tree-sitter-zig = "1.1.2"
 tree-sitter-java = "0.23.5"
+tree-sitter-yaml = "0.7.2"
 once_cell = "1.20"
 arboard = "3.4"
 tui-textarea = "0.7"
 inquire = "0.7"
 sha2 = "0.10"
+libc = "0.2"
 git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2", "vendored-openssl", "https"] }
 jj-lib = { version = "0.37.0", features = ["git"], optional = true }
 chrono = { version = "0.4", optional = true }

@@ -14,6 +14,7 @@ pub mod configure;
 pub mod diff;
 pub mod draft;
 pub mod explain;
+pub mod git_integration;
 pub mod list;
 pub mod operate;
 

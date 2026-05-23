@@ -113,7 +113,7 @@ pub enum FocusedPanel {
 }
 
 /// Which panel in the diff view has selection focus (old vs new)
-#[derive(Clone, Copy, PartialEq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum DiffPanelFocus {
     #[default]
     None,
@@ -223,6 +223,73 @@ impl Selection {
             SelectionMode::None => false,
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub enum DiffLayout {
+    #[default]
+    Split,
+    Stack,
+}
+
+impl DiffLayout {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Split => "split",
+            Self::Stack => "stack",
+        }
+    }
+
+    pub fn toggled(self) -> Self {
+        match self {
+            Self::Split => Self::Stack,
+            Self::Stack => Self::Split,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct StackRow {
+    pub line_idx: usize,
+    pub panel: DiffPanelFocus,
+}
+
+pub fn stack_rows_for_viewport(
+    side_by_side: &[DiffLine],
+    scroll: usize,
+    max_rows: usize,
+) -> Vec<StackRow> {
+    let mut rows = Vec::with_capacity(max_rows);
+
+    for (line_idx, line) in side_by_side.iter().enumerate().skip(scroll) {
+        let mut push = |panel| {
+            if rows.len() < max_rows {
+                rows.push(StackRow { line_idx, panel });
+            }
+        };
+
+        match line.change_type {
+            ChangeType::Equal => {
+                if line.new_line.is_some() {
+                    push(DiffPanelFocus::New);
+                } else if line.old_line.is_some() {
+                    push(DiffPanelFocus::Old);
+                }
+            }
+            ChangeType::Delete => push(DiffPanelFocus::Old),
+            ChangeType::Insert => push(DiffPanelFocus::New),
+            ChangeType::Modified => {
+                push(DiffPanelFocus::Old);
+                push(DiffPanelFocus::New);
+            }
+        }
+
+        if rows.len() >= max_rows {
+            break;
+        }
+    }
+
+    rows
 }
 
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
@@ -434,4 +501,76 @@ pub fn build_file_tree(file_diffs: &[FileDiff]) -> Vec<SidebarItem> {
     }
 
     items
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn paired_line(change_type: ChangeType) -> DiffLine {
+        DiffLine {
+            old_line: Some((1, "old".to_string())),
+            new_line: Some((1, "new".to_string())),
+            change_type,
+            old_segments: None,
+            new_segments: None,
+        }
+    }
+
+    #[test]
+    fn diff_layout_defaults_to_split() {
+        assert_eq!(DiffLayout::default(), DiffLayout::Split);
+    }
+
+    #[test]
+    fn stack_rows_map_diff_sides_to_rendered_rows() {
+        let rows = stack_rows_for_viewport(
+            &[
+                paired_line(ChangeType::Equal),
+                DiffLine {
+                    old_line: Some((2, "old".to_string())),
+                    new_line: None,
+                    change_type: ChangeType::Delete,
+                    old_segments: None,
+                    new_segments: None,
+                },
+                DiffLine {
+                    old_line: None,
+                    new_line: Some((2, "new".to_string())),
+                    change_type: ChangeType::Insert,
+                    old_segments: None,
+                    new_segments: None,
+                },
+                paired_line(ChangeType::Modified),
+            ],
+            0,
+            8,
+        );
+
+        assert_eq!(
+            rows,
+            vec![
+                StackRow {
+                    line_idx: 0,
+                    panel: DiffPanelFocus::New,
+                },
+                StackRow {
+                    line_idx: 1,
+                    panel: DiffPanelFocus::Old,
+                },
+                StackRow {
+                    line_idx: 2,
+                    panel: DiffPanelFocus::New,
+                },
+                StackRow {
+                    line_idx: 3,
+                    panel: DiffPanelFocus::Old,
+                },
+                StackRow {
+                    line_idx: 3,
+                    panel: DiffPanelFocus::New,
+                },
+            ]
+        );
+    }
 }

@@ -40,7 +40,9 @@ pub fn git(dir: &Path, args: &[&str]) {
 
     match args[0] {
         "init" => {
-            Repository::init(dir).expect("failed to init repo");
+            let repo = Repository::init(dir).expect("failed to init repo");
+            repo.set_head("refs/heads/main")
+                .expect("failed to set default branch");
         }
         "config" if args.len() >= 3 => {
             let repo = Repository::open(dir).expect("failed to open repo");
@@ -181,18 +183,22 @@ impl RepoGuard {
         // Create initial commit
         let sig =
             Signature::now("Test User", "test@example.com").expect("failed to create signature");
-        repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            "init",
-            &tree,
-            &[], // No parents for initial commit
-        )
-        .expect("failed to create commit");
+        let commit_oid = repo
+            .commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                "init",
+                &tree,
+                &[], // No parents for initial commit
+            )
+            .expect("failed to create commit");
 
         // Need to also set up main branch ref (git2 doesn't auto-create it on first commit like CLI)
-        // The commit above should have already created HEAD pointing to the commit
+        repo.reference("refs/heads/main", commit_oid, true, "set main branch")
+            .expect("failed to create main branch");
+        repo.set_head("refs/heads/main")
+            .expect("failed to set HEAD to main");
 
         env::set_current_dir(&dir).expect("failed to set cwd");
 

@@ -12,6 +12,9 @@ pub enum ThemeMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemePreset {
+    Auto,
+    Midnight,
+    TokyoNight,
     DefaultDark,
     DefaultLight,
     CatppuccinMocha,
@@ -30,6 +33,9 @@ impl FromStr for ThemePreset {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().replace('_', "-").as_str() {
+            "auto" => Ok(Self::Auto),
+            "default" | "midnight" => Ok(Self::Midnight),
+            "tokyonight" | "tokyo-night" => Ok(Self::TokyoNight),
             "default-dark" | "dark" => Ok(Self::DefaultDark),
             "default-light" | "light" => Ok(Self::DefaultLight),
             "catppuccin-mocha" | "mocha" => Ok(Self::CatppuccinMocha),
@@ -42,7 +48,7 @@ impl FromStr for ThemePreset {
             "solarized-dark" => Ok(Self::SolarizedDark),
             "solarized-light" => Ok(Self::SolarizedLight),
             _ => Err(format!(
-                "Unknown theme '{}'. Valid: default-dark, default-light, catppuccin-mocha, catppuccin-latte, dracula, nord, gruvbox-dark, gruvbox-light, one-dark, solarized-dark, solarized-light",
+                "Unknown theme '{}'. Valid: auto, default, midnight, tokyonight, default-dark, default-light, catppuccin-mocha, catppuccin-latte, dracula, nord, gruvbox-dark, gruvbox-light, one-dark, solarized-dark, solarized-light",
                 s
             )),
         }
@@ -253,6 +259,128 @@ impl Theme {
         }
     }
 
+    pub fn midnight() -> Self {
+        Self {
+            mode: ThemeMode::Dark,
+            syntax: SyntaxColors {
+                comment: Color::Rgb(94, 116, 148),
+                keyword: Color::Rgb(255, 99, 164),
+                string: Color::Rgb(197, 174, 255),
+                number: Color::Rgb(255, 144, 112),
+                function: Color::Rgb(190, 128, 255),
+                function_macro: Color::Rgb(89, 214, 255),
+                r#type: Color::Rgb(255, 176, 76),
+                variable_builtin: Color::Rgb(255, 213, 74),
+                variable_member: Color::Rgb(123, 214, 255),
+                module: Color::Rgb(255, 176, 76),
+                operator: Color::Rgb(31, 213, 255),
+                tag: Color::Rgb(255, 99, 164),
+                attribute: Color::Rgb(255, 176, 76),
+                label: Color::Rgb(125, 231, 255),
+                punctuation: Color::Rgb(154, 174, 213),
+                default_text: Color::Rgb(211, 222, 244),
+            },
+            diff: DiffColors {
+                added_bg: Color::Rgb(17, 76, 44),
+                added_gutter_bg: Color::Rgb(22, 117, 65),
+                added_gutter_fg: Color::Rgb(112, 255, 174),
+                deleted_bg: Color::Rgb(75, 35, 42),
+                deleted_gutter_bg: Color::Rgb(133, 63, 70),
+                deleted_gutter_fg: Color::Rgb(255, 145, 155),
+                context_bg: Color::Rgb(15, 34, 56),
+                empty_placeholder_fg: Color::Rgb(43, 63, 90),
+                added_word_bg: Color::Rgb(24, 112, 61),
+                deleted_word_bg: Color::Rgb(115, 51, 60),
+            },
+            ui: UiColors {
+                border_focused: Color::Rgb(55, 91, 132),
+                border_unfocused: Color::Rgb(31, 56, 86),
+                text_primary: Color::Rgb(232, 238, 252),
+                text_secondary: Color::Rgb(159, 182, 218),
+                text_muted: Color::Rgb(105, 131, 168),
+                line_number: Color::Rgb(91, 127, 171),
+                bg: Color::Rgb(8, 23, 40),
+                footer_branch_bg: Color::Rgb(14, 36, 61),
+                footer_branch_fg: Color::Rgb(139, 198, 255),
+                status_added: Color::Rgb(112, 255, 174),
+                status_modified: Color::Rgb(146, 220, 255),
+                status_deleted: Color::Rgb(255, 117, 131),
+                stats_added: Color::Rgb(112, 255, 174),
+                stats_removed: Color::Rgb(255, 117, 131),
+                selection_bg: Color::Rgb(112, 194, 255),
+                selection_fg: Color::Rgb(5, 21, 38),
+                highlight: Color::Rgb(255, 213, 74),
+                viewed: Color::Rgb(112, 255, 174),
+                watching: Color::Rgb(255, 213, 74),
+                search_match_bg: Color::Rgb(121, 83, 36),
+                search_match_fg: Color::Rgb(255, 230, 169),
+                search_current_bg: Color::Rgb(255, 176, 76),
+                search_current_fg: Color::Rgb(8, 23, 40),
+            },
+        }
+    }
+
+    pub fn tokyonight() -> Self {
+        Self {
+            mode: ThemeMode::Dark,
+            syntax: SyntaxColors {
+                comment: Color::Rgb(86, 95, 137),
+                keyword: Color::Rgb(187, 154, 247),
+                string: Color::Rgb(158, 206, 106),
+                number: Color::Rgb(255, 158, 100),
+                function: Color::Rgb(122, 162, 247),
+                function_macro: Color::Rgb(125, 207, 255),
+                r#type: Color::Rgb(255, 199, 119),
+                variable_builtin: Color::Rgb(247, 118, 142),
+                variable_member: Color::Rgb(115, 218, 202),
+                module: Color::Rgb(224, 175, 104),
+                operator: Color::Rgb(137, 221, 255),
+                tag: Color::Rgb(247, 118, 142),
+                attribute: Color::Rgb(122, 162, 247),
+                label: Color::Rgb(255, 158, 100),
+                punctuation: Color::Rgb(169, 177, 214),
+                default_text: Color::Rgb(192, 202, 245),
+            },
+            diff: DiffColors {
+                added_bg: Color::Rgb(24, 61, 52),
+                added_gutter_bg: Color::Rgb(35, 91, 66),
+                added_gutter_fg: Color::Rgb(158, 206, 106),
+                deleted_bg: Color::Rgb(61, 34, 49),
+                deleted_gutter_bg: Color::Rgb(90, 47, 61),
+                deleted_gutter_fg: Color::Rgb(247, 118, 142),
+                context_bg: Color::Rgb(26, 27, 38),
+                empty_placeholder_fg: Color::Rgb(65, 72, 104),
+                added_word_bg: Color::Rgb(42, 100, 70),
+                deleted_word_bg: Color::Rgb(108, 52, 66),
+            },
+            ui: UiColors {
+                border_focused: Color::Rgb(122, 162, 247),
+                border_unfocused: Color::Rgb(65, 72, 104),
+                text_primary: Color::Rgb(192, 202, 245),
+                text_secondary: Color::Rgb(169, 177, 214),
+                text_muted: Color::Rgb(86, 95, 137),
+                line_number: Color::Rgb(86, 95, 137),
+                bg: Color::Rgb(22, 22, 30),
+                footer_branch_bg: Color::Rgb(36, 40, 59),
+                footer_branch_fg: Color::Rgb(122, 162, 247),
+                status_added: Color::Rgb(158, 206, 106),
+                status_modified: Color::Rgb(224, 175, 104),
+                status_deleted: Color::Rgb(247, 118, 142),
+                stats_added: Color::Rgb(158, 206, 106),
+                stats_removed: Color::Rgb(247, 118, 142),
+                selection_bg: Color::Rgb(122, 162, 247),
+                selection_fg: Color::Rgb(26, 27, 38),
+                highlight: Color::Rgb(224, 175, 104),
+                viewed: Color::Rgb(158, 206, 106),
+                watching: Color::Rgb(224, 175, 104),
+                search_match_bg: Color::Rgb(224, 175, 104),
+                search_match_fg: Color::Rgb(26, 27, 38),
+                search_current_bg: Color::Rgb(255, 158, 100),
+                search_current_fg: Color::Rgb(26, 27, 38),
+            },
+        }
+    }
+
     pub fn from_mode(mode: ThemeMode) -> Self {
         match mode {
             ThemeMode::Dark => Self::dark(),
@@ -262,6 +390,9 @@ impl Theme {
 
     pub fn from_preset(preset: ThemePreset) -> Self {
         match preset {
+            ThemePreset::Auto => Self::from_mode(ThemeMode::detect()),
+            ThemePreset::Midnight => Self::midnight(),
+            ThemePreset::TokyoNight => Self::tokyonight(),
             ThemePreset::DefaultDark => Self::dark(),
             ThemePreset::DefaultLight => Self::light(),
             ThemePreset::CatppuccinMocha => Self::catppuccin_mocha(),
@@ -316,7 +447,7 @@ impl Theme {
                 text_secondary: Color::Rgb(166, 173, 200),   // subtext0
                 text_muted: Color::Rgb(108, 112, 134),       // overlay0
                 line_number: Color::Rgb(88, 91, 112),        // overlay0
-                bg: Color::Rgb(24, 24, 37),           // mantle
+                bg: Color::Rgb(24, 24, 37),                  // mantle
                 footer_branch_bg: Color::Rgb(49, 50, 68),    // surface0
                 footer_branch_fg: Color::Rgb(137, 180, 250), // blue
                 status_added: Color::Rgb(166, 227, 161),     // green
@@ -499,7 +630,7 @@ impl Theme {
                 text_secondary: Color::Rgb(216, 222, 233), // nord4
                 text_muted: Color::Rgb(76, 86, 106),       // nord3
                 line_number: Color::Rgb(76, 86, 106),
-                bg: Color::Rgb(59, 66, 82),        // nord1
+                bg: Color::Rgb(59, 66, 82),               // nord1
                 footer_branch_bg: Color::Rgb(67, 76, 94), // nord2
                 footer_branch_fg: Color::Rgb(136, 192, 208),
                 status_added: Color::Rgb(163, 190, 140),
@@ -826,26 +957,54 @@ impl Theme {
     }
 }
 
-pub fn init(config_theme: Option<&str>) {
-    // Priority: config file > env var > OS auto-detect
+pub fn init(config_theme: Option<&str>) -> Result<(), String> {
+    // Keep startup deterministic: terminal probing only happens for explicit auto.
     let theme_name = config_theme
         .map(|s| s.to_string())
+        .or_else(|| std::env::var("DIVERGENT_THEME").ok())
         .or_else(|| std::env::var("LUMEN_THEME").ok());
 
     let theme = if let Some(name) = theme_name {
         match name.parse::<ThemePreset>() {
             Ok(preset) => Theme::from_preset(preset),
-            Err(err) => {
-                eprintln!("\x1b[33mwarning:\x1b[0m {}", err);
-                Theme::from_mode(ThemeMode::detect())
-            }
+            Err(err) => return Err(err),
         }
     } else {
-        Theme::from_mode(ThemeMode::detect())
+        Theme::midnight()
     };
     let _ = THEME.set(theme);
+    Ok(())
 }
 
 pub fn get() -> &'static Theme {
-    THEME.get_or_init(|| Theme::from_mode(ThemeMode::detect()))
+    THEME.get_or_init(Theme::midnight)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_theme_is_midnight_without_terminal_probe() {
+        let theme = Theme::from_preset(ThemePreset::Midnight);
+        assert_eq!(theme.mode, ThemeMode::Dark);
+        assert_eq!(theme.ui.bg, Color::Rgb(8, 23, 40));
+    }
+
+    #[test]
+    fn theme_parses_public_choices() {
+        assert_eq!(
+            "default".parse::<ThemePreset>().unwrap(),
+            ThemePreset::Midnight
+        );
+        assert_eq!(
+            "midnight".parse::<ThemePreset>().unwrap(),
+            ThemePreset::Midnight
+        );
+        assert_eq!(
+            "tokyonight".parse::<ThemePreset>().unwrap(),
+            ThemePreset::TokyoNight
+        );
+        assert_eq!("auto".parse::<ThemePreset>().unwrap(), ThemePreset::Auto);
+    }
 }

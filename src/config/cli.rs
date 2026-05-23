@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use crate::commit_reference::CommitReference;
@@ -13,11 +14,11 @@ pub enum VcsOverride {
 }
 
 #[derive(Parser)]
-#[command(name = "lumen")]
-#[command(about = "AI-powered CLI tool for git commit summaries", long_about = None)]
+#[command(name = "divergent")]
+#[command(about = "Fast terminal diff viewer for git and jj", long_about = None)]
 #[command(version)]
 pub struct Cli {
-    /// Path to configuration file eg: ./path/to/lumen.config.json
+    /// Path to configuration file eg: ./path/to/divergent.config.json
     #[arg(long)]
     pub config: Option<String>,
 
@@ -124,7 +125,7 @@ pub enum Commands {
         #[arg(short, long)]
         watch: bool,
 
-        /// Color theme (e.g., dracula, nord, gruvbox-dark, catppuccin-mocha)
+        /// Color theme (auto, default, tokyonight, midnight)
         #[arg(short, long)]
         theme: Option<String>,
 
@@ -136,8 +137,33 @@ pub enum Commands {
         #[arg(long)]
         focus: Option<String>,
     },
+    /// Manage global git integration.
+    Git {
+        #[command(subcommand)]
+        command: GitCommand,
+    },
+    #[command(name = "git-pager", hide = true)]
+    GitPager,
     /// Interactively configure Lumen (provider, API key)
     Configure,
+}
+
+#[derive(Subcommand)]
+pub enum GitCommand {
+    /// Configure global git diff to open Divergent.
+    Install {
+        /// Overwrite an existing non-Divergent pager.diff value.
+        #[arg(long)]
+        force: bool,
+
+        /// Divergent binary path to install into the pager command.
+        #[arg(long)]
+        binary: Option<PathBuf>,
+    },
+    /// Remove the Divergent-managed global git diff integration.
+    Uninstall,
+    /// Show whether global git diff is managed by Divergent.
+    Status,
 }
 
 #[cfg(test)]
@@ -146,19 +172,33 @@ mod tests {
 
     #[test]
     fn test_vcs_git_parses() {
-        let cli = Cli::try_parse_from(["lumen", "--vcs", "git", "diff"]).unwrap();
+        let cli = Cli::try_parse_from(["divergent", "--vcs", "git", "diff"]).unwrap();
         assert_eq!(cli.vcs, Some(VcsOverride::Git));
     }
 
     #[test]
     fn test_vcs_jj_parses() {
-        let cli = Cli::try_parse_from(["lumen", "--vcs", "jj", "diff"]).unwrap();
+        let cli = Cli::try_parse_from(["divergent", "--vcs", "jj", "diff"]).unwrap();
         assert_eq!(cli.vcs, Some(VcsOverride::Jj));
     }
 
     #[test]
     fn test_vcs_not_specified() {
-        let cli = Cli::try_parse_from(["lumen", "diff"]).unwrap();
+        let cli = Cli::try_parse_from(["divergent", "diff"]).unwrap();
         assert_eq!(cli.vcs, None);
+    }
+
+    #[test]
+    fn test_git_install_parses() {
+        let cli = Cli::try_parse_from(["divergent", "git", "install", "--force"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Git {
+                command: GitCommand::Install {
+                    force: true,
+                    binary: None
+                }
+            }
+        ));
     }
 }

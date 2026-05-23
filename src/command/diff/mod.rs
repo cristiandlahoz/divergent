@@ -13,6 +13,8 @@ pub mod theme;
 mod types;
 mod watcher;
 
+pub(crate) use types::{FileDiff, FileStatus};
+
 use std::collections::HashSet;
 use std::io;
 use std::process::{self, Command};
@@ -407,4 +409,12 @@ pub fn run_diff_ui(options: DiffOptions, backend: &dyn VcsBackend) -> io::Result
     }
 
     app::run_app(options, None, backend)
+}
+
+pub fn run_diff_ui_from_file_diffs(
+    options: DiffOptions,
+    file_diffs: Vec<types::FileDiff>,
+    backend: &dyn VcsBackend,
+) -> io::Result<()> {
+    app::run_app_from_file_diffs(options, file_diffs, backend)
 }

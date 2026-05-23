@@ -40,195 +40,269 @@ pub struct LanguageConfig {
     pub config: HighlightConfiguration,
 }
 
+type ConfigCell = Lazy<Option<LanguageConfig>>;
+
+pub struct LanguageEntry {
+    pub extensions: &'static [&'static str],
+    pub config: &'static ConfigCell,
+}
+
 fn load_config(
     language: tree_sitter::Language,
     name: &str,
     highlights: &str,
-    ext: &'static str,
-    configs: &mut Vec<(&'static str, LanguageConfig)>,
-) {
+    extensions: &'static [&'static str],
+) -> Option<LanguageConfig> {
     match HighlightConfiguration::new(language, name, highlights, "", "") {
         Ok(mut config) => {
             config.configure(HIGHLIGHT_NAMES);
-            configs.push((ext, LanguageConfig { config }));
+            Some(LanguageConfig { config })
         }
         Err(_e) => {
             #[cfg(debug_assertions)]
-            eprintln!("[WARN] Failed to load {} highlight config: {:?}", name, _e);
+            eprintln!(
+                "[WARN] Failed to load {} highlight config for {:?}: {:?}",
+                name, extensions, _e
+            );
+            #[cfg(not(debug_assertions))]
+            let _ = extensions;
+            None
         }
     }
 }
 
-pub static CONFIGS: Lazy<Vec<(&'static str, LanguageConfig)>> = Lazy::new(|| {
-    let mut configs = Vec::new();
-
+static TYPESCRIPT_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         "typescript",
         TS_HIGHLIGHTS,
-        "ts",
-        &mut configs,
-    );
-
+        &["ts", "mts", "cts"],
+    )
+});
+static TSX_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_typescript::LANGUAGE_TSX.into(),
         "tsx",
         TSX_HIGHLIGHTS,
-        "tsx",
-        &mut configs,
-    );
-
+        &["tsx"],
+    )
+});
+static JAVASCRIPT_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_javascript::LANGUAGE.into(),
         "javascript",
         JS_HIGHLIGHTS,
-        "js",
-        &mut configs,
-    );
-
-    load_config(
-        tree_sitter_javascript::LANGUAGE.into(),
-        "javascript",
-        JS_HIGHLIGHTS,
-        "jsx",
-        &mut configs,
-    );
-
+        &["js", "jsx", "mjs", "cjs"],
+    )
+});
+static RUST_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_rust::LANGUAGE.into(),
         "rust",
         RUST_HIGHLIGHTS,
-        "rs",
-        &mut configs,
-    );
-
+        &["rs"],
+    )
+});
+static JSON_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_json::LANGUAGE.into(),
         "json",
         JSON_HIGHLIGHTS,
-        "json",
-        &mut configs,
-    );
-
+        &["json"],
+    )
+});
+static PYTHON_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_python::LANGUAGE.into(),
         "python",
         PYTHON_HIGHLIGHTS,
-        "py",
-        &mut configs,
-    );
-
+        &["py", "pyw"],
+    )
+});
+static GO_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_go::LANGUAGE.into(),
         "go",
         GO_HIGHLIGHTS,
-        "go",
-        &mut configs,
-    );
-
+        &["go"],
+    )
+});
+static CSS_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_css::LANGUAGE.into(),
         "css",
         CSS_HIGHLIGHTS,
-        "css",
-        &mut configs,
-    );
-
+        &["css"],
+    )
+});
+static HTML_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_html::LANGUAGE.into(),
         "html",
         HTML_HIGHLIGHTS,
-        "html",
-        &mut configs,
-    );
-
+        &["html"],
+    )
+});
+static TOML_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_toml_ng::LANGUAGE.into(),
         "toml",
         TOML_HIGHLIGHTS,
-        "toml",
-        &mut configs,
-    );
-
+        &["toml"],
+    )
+});
+static BASH_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_bash::LANGUAGE.into(),
         "bash",
         BASH_HIGHLIGHTS,
-        "sh",
-        &mut configs,
-    );
-
-    load_config(
-        tree_sitter_bash::LANGUAGE.into(),
-        "bash",
-        BASH_HIGHLIGHTS,
-        "bash",
-        &mut configs,
-    );
-
+        &["sh", "bash", "zsh", "ksh", "bats"],
+    )
+});
+static MARKDOWN_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_md::LANGUAGE.into(),
         "markdown",
         MD_HIGHLIGHTS,
-        "md",
-        &mut configs,
-    );
-
-    load_config(
-        tree_sitter_md::LANGUAGE.into(),
-        "markdown",
-        MD_HIGHLIGHTS,
-        "mdx",
-        &mut configs,
-    );
-
+        &["md", "mdx", "markdown"],
+    )
+});
+static CSHARP_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_c_sharp::LANGUAGE.into(),
         "c_sharp",
         CSHARP_HIGHLIGHTS,
-        "cs",
-        &mut configs,
-    );
-
+        &["cs", "csx"],
+    )
+});
+static JAVA_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_java::LANGUAGE.into(),
         "java",
         JAVA_HIGHLIGHTS,
-        "java",
-        &mut configs,
-    );
-
+        &["java"],
+    )
+});
+static RUBY_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_ruby::LANGUAGE.into(),
         "ruby",
         RUBY_HIGHLIGHTS,
-        "rb",
-        &mut configs,
-    );
-
+        &["rb", "rake", "gemspec"],
+    )
+});
+static ELIXIR_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_elixir::LANGUAGE.into(),
         "elixir",
         ELIXIR_HIGHLIGHTS,
-        "ex",
-        &mut configs,
-    );
-
-    load_config(
-        tree_sitter_elixir::LANGUAGE.into(),
-        "elixir",
-        ELIXIR_HIGHLIGHTS,
-        "exs",
-        &mut configs,
-    );
-
+        &["ex", "exs"],
+    )
+});
+static ZIG_CONFIG: ConfigCell = Lazy::new(|| {
     load_config(
         tree_sitter_zig::LANGUAGE.into(),
         "zig",
         ZIG_HIGHLIGHTS,
-        "zig",
-        &mut configs,
-    );
-
-    configs
+        &["zig"],
+    )
 });
+static YAML_CONFIG: ConfigCell = Lazy::new(|| {
+    load_config(
+        tree_sitter_yaml::LANGUAGE.into(),
+        "yaml",
+        tree_sitter_yaml::HIGHLIGHTS_QUERY,
+        &["yaml", "yml"],
+    )
+});
+
+pub static LANGUAGES: &[LanguageEntry] = &[
+    LanguageEntry {
+        extensions: &["ts", "mts", "cts"],
+        config: &TYPESCRIPT_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["tsx"],
+        config: &TSX_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["js", "jsx", "mjs", "cjs"],
+        config: &JAVASCRIPT_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["rs"],
+        config: &RUST_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["json"],
+        config: &JSON_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["py", "pyw"],
+        config: &PYTHON_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["go"],
+        config: &GO_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["css"],
+        config: &CSS_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["html"],
+        config: &HTML_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["toml"],
+        config: &TOML_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["sh", "bash", "zsh", "ksh", "bats"],
+        config: &BASH_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["md", "mdx", "markdown"],
+        config: &MARKDOWN_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["cs", "csx"],
+        config: &CSHARP_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["java"],
+        config: &JAVA_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["rb", "rake", "gemspec"],
+        config: &RUBY_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["ex", "exs"],
+        config: &ELIXIR_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["zig"],
+        config: &ZIG_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["yaml", "yml"],
+        config: &YAML_CONFIG,
+    },
+];
+
+pub fn get_config_for_extension(ext: &str) -> Option<&'static LanguageConfig> {
+    let ext = ext.to_ascii_lowercase();
+    LANGUAGES
+        .iter()
+        .find(|entry| entry.extensions.contains(&ext.as_str()))
+        .and_then(|entry| entry.config.as_ref())
+}
+
+#[cfg(test)]
+pub fn supported_extensions() -> Vec<&'static str> {
+    LANGUAGES
+        .iter()
+        .flat_map(|entry| entry.extensions.iter().copied())
+        .collect()
+}

@@ -8,7 +8,7 @@ use ratatui::prelude::*;
 use tree_sitter_highlight::{HighlightEvent, Highlighter};
 
 use super::theme;
-use config::{LanguageConfig, CONFIGS, HIGHLIGHT_NAMES};
+use config::{get_config_for_extension, LanguageConfig, HIGHLIGHT_NAMES};
 
 pub fn highlight_color(index: usize) -> Color {
     let t = theme::get();
@@ -37,7 +37,7 @@ pub fn highlight_color(index: usize) -> Color {
 
 fn get_config_for_file(filename: &str) -> Option<&'static LanguageConfig> {
     let ext = Path::new(filename).extension().and_then(|e| e.to_str())?;
-    CONFIGS.iter().find(|(e, _)| *e == ext).map(|(_, c)| c)
+    get_config_for_extension(ext)
 }
 
 fn highlight_code(code: &str, filename: &str) -> Vec<(String, Option<usize>)> {
@@ -207,22 +207,13 @@ pub fn highlight_line_spans<'a>(line: &str, filename: &str, bg: Option<Color>) -
         .collect()
 }
 
-pub fn init() {
-    let _ = &*CONFIGS;
-    #[cfg(debug_assertions)]
-    {
-        let extensions: Vec<&str> = CONFIGS.iter().map(|(ext, _)| *ext).collect();
-        eprintln!("[DEBUG] Loaded highlight configs for: {:?}", extensions);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_all_configs_load() {
-        let extensions: Vec<&str> = CONFIGS.iter().map(|(ext, _)| *ext).collect();
+        let extensions = config::supported_extensions();
         assert!(extensions.contains(&"rs"), "Rust config should be loaded");
         assert!(
             extensions.contains(&"ts"),
@@ -238,8 +229,13 @@ mod tests {
         assert!(extensions.contains(&"go"), "Go config should be loaded");
         assert!(extensions.contains(&"json"), "JSON config should be loaded");
         assert!(extensions.contains(&"ex"), "Elixir config should be loaded");
-        assert!(extensions.contains(&"exs"), "Elixir script config should be loaded");
+        assert!(
+            extensions.contains(&"exs"),
+            "Elixir script config should be loaded"
+        );
         assert!(extensions.contains(&"zig"), "Zig config should be loaded");
+        assert!(extensions.contains(&"yaml"), "YAML config should be loaded");
+        assert!(extensions.contains(&"yml"), "YML config should be loaded");
     }
 
     #[test]
@@ -299,7 +295,10 @@ function hello(): string {
 end
 "#;
         let result = highlight_code(code, "test.ex");
-        assert!(!result.is_empty(), "Elixir highlighting should produce output");
+        assert!(
+            !result.is_empty(),
+            "Elixir highlighting should produce output"
+        );
         let has_highlights = result.iter().any(|(_, h)| h.is_some());
         assert!(has_highlights, "Elixir code should have syntax highlights");
     }
@@ -314,17 +313,14 @@ pub fn main() !void {
 }
 "#;
         let result = highlight_code(code, "test.zig");
-        assert!(
-            !result.is_empty(),
-            "Zig highlighting should produce output"
-        );
+        assert!(!result.is_empty(), "Zig highlighting should produce output");
         let has_highlights = result.iter().any(|(_, h)| h.is_some());
         assert!(has_highlights, "Zig code should have syntax highlights");
     }
 
     #[test]
     fn test_java_highlighting() {
-        let code = r#"package dev.lumen;
+        let code = r#"package dev.divergent;
 
 import java.util.List;
 
@@ -562,5 +558,31 @@ function foo() {}"#;
         let line12_spans = highlighter.get_line_spans(12, None);
         let has_function = line12_spans.iter().any(|s| s.content.contains("function"));
         assert!(has_function, "Line 12 should contain 'function'");
+    }
+
+    #[test]
+    fn test_yaml_highlighting() {
+        let code = r#"server:
+  port: 8080
+spring:
+  application:
+    name: divergent
+"#;
+        let result = highlight_code(code, "application.yml");
+        assert!(
+            !result.is_empty(),
+            "YAML highlighting should produce output"
+        );
+        let has_highlights = result.iter().any(|(_, h)| h.is_some());
+        assert!(has_highlights, "YAML should have syntax highlights");
+    }
+
+    #[test]
+    fn test_yaml_extension_is_case_insensitive() {
+        let highlighter = FileHighlighter::new("name: divergent\n", "CONFIG.YAML");
+        assert!(
+            !highlighter.is_empty(),
+            "Uppercase YAML extension should load"
+        );
     }
 }
