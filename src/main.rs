@@ -140,7 +140,7 @@ async fn run() -> Result<(), LumenError> {
         Commands::Git { command } => {
             command::git_integration::execute(command)?;
         }
-        Commands::GitPager => {
+        Commands::GitPager { patch_file } => {
             let backend = selected_backend(cli.vcs)?;
             let options = command::diff::DiffOptions {
                 reference: None,
@@ -152,7 +152,12 @@ async fn run() -> Result<(), LumenError> {
                 focus: None,
             };
             let mut stdin = std::io::stdin();
-            command::git_integration::run_pager(options, backend.as_ref(), &mut stdin)?;
+            command::git_integration::run_pager(
+                options,
+                backend.as_ref(),
+                &mut stdin,
+                patch_file.as_deref(),
+            )?;
         }
         Commands::Configure => {
             command::configure::ConfigureCommand::execute()?;

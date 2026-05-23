@@ -143,7 +143,10 @@ pub enum Commands {
         command: GitCommand,
     },
     #[command(name = "git-pager", hide = true)]
-    GitPager,
+    GitPager {
+        #[arg(long)]
+        patch_file: Option<PathBuf>,
+    },
     /// Interactively configure Lumen (provider, API key)
     Configure,
 }

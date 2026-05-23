@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -66,10 +67,10 @@ pub fn run_pager(
     options: DiffOptions,
     backend: &dyn VcsBackend,
     input: &mut dyn Read,
+    patch_file: Option<&Path>,
 ) -> io::Result<()> {
-    let mut patch = String::new();
-    input.read_to_string(&mut patch)?;
-    if !attach_tty_for_tui()? {
+    let patch = read_patch(input, patch_file)?;
+    if patch_file.is_none() && !attach_tty_for_tui()? {
         io::stdout().write_all(patch.as_bytes())?;
         return Ok(());
     }
@@ -79,9 +80,21 @@ pub fn run_pager(
 
 fn managed_pager_command(binary: &Path) -> String {
     format!(
-        "sh -c 'exec \"$0\" git-pager' {}",
+        "sh -c 'tmp=\"${{TMPDIR:-/tmp}}/divergent-git-pager-$$.diff\"; cat > \"$tmp\"; if [ -e /dev/tty ]; then exec \"$0\" git-pager --patch-file \"$tmp\" < /dev/tty > /dev/tty 2> /dev/tty; else exec \"$0\" git-pager --patch-file \"$tmp\"; fi' {}",
         shell_quote(binary.as_os_str())
     )
+}
+
+fn read_patch(input: &mut dyn Read, patch_file: Option<&Path>) -> io::Result<String> {
+    if let Some(path) = patch_file {
+        let patch = fs::read_to_string(path)?;
+        let _ = fs::remove_file(path);
+        Ok(patch)
+    } else {
+        let mut patch = String::new();
+        input.read_to_string(&mut patch)?;
+        Ok(patch)
+    }
 }
 
 fn shell_quote(value: &OsStr) -> String {
