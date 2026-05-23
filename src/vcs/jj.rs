@@ -34,7 +34,7 @@ use pollster::FutureExt;
 
 use super::backend::{CommitInfo, StackedCommitInfo, VcsBackend, VcsError};
 
-/// Files to exclude from diff output (same as GIT_DIFF_EXCLUSIONS in git_entity).
+/// Files to exclude from diff output.
 const DIFF_EXCLUDED_FILES: &[&str] = &[
     "package-lock.json",
     "yarn.lock",
@@ -242,7 +242,7 @@ impl JjBackend {
         let mut diff_output = String::new();
 
         // Use the tree diff stream to iterate over changes.
-        // Note: We use pollster::block_on() because lumen is a single-threaded CLI tool
+        // jj streams file contents asynchronously; the terminal UI reads them synchronously.
         // that doesn't need async concurrency. jj-lib's async APIs are primarily for
         // I/O operations that complete quickly in our use case.
         let diff_stream = parent_tree.diff_stream(&commit_tree, &EverythingMatcher);

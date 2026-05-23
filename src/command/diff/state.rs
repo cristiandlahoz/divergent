@@ -6,8 +6,8 @@ use crate::command::diff::highlight::FileHighlighter;
 
 use crate::command::diff::search::SearchState;
 use crate::command::diff::types::{
-    build_file_tree, CursorPosition, DiffFullscreen, DiffLine, DiffPanelFocus,
-    DiffViewSettings, FileDiff, FocusedPanel, Selection, SelectionMode, SidebarItem,
+    build_file_tree, CursorPosition, DiffFullscreen, DiffLine, DiffPanelFocus, DiffViewSettings,
+    FileDiff, FocusedPanel, Selection, SelectionMode, SidebarItem,
 };
 use crate::vcs::StackedCommitInfo;
 
@@ -105,7 +105,10 @@ impl Annotation {
     #[cfg(not(feature = "jj"))]
     pub fn format_time(&self) -> String {
         use std::time::UNIX_EPOCH;
-        let duration = self.created_at.duration_since(UNIX_EPOCH).unwrap_or_default();
+        let duration = self
+            .created_at
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
         let secs = duration.as_secs();
         let hours = (secs / 3600) % 24;
         let minutes = (secs / 60) % 60;
@@ -128,7 +131,11 @@ impl Annotation {
     pub fn line_range_display(&self) -> String {
         match &self.target {
             AnnotationTarget::File => String::new(),
-            AnnotationTarget::LineRange { start_line, end_line, .. } => {
+            AnnotationTarget::LineRange {
+                start_line,
+                end_line,
+                ..
+            } => {
                 if start_line == end_line {
                     format!("L{}", start_line)
                 } else {
@@ -486,7 +493,12 @@ impl AppState {
     }
 
     /// Start a new selection
-    pub fn start_selection(&mut self, panel: DiffPanelFocus, pos: CursorPosition, mode: SelectionMode) {
+    pub fn start_selection(
+        &mut self,
+        panel: DiffPanelFocus,
+        pos: CursorPosition,
+        mode: SelectionMode,
+    ) {
         self.diff_panel_focus = panel;
         self.selection = Selection {
             panel,
@@ -715,8 +727,13 @@ impl AppState {
         self.sidebar_items = build_file_tree(&self.file_diffs);
 
         // Retain annotations whose file still exists
-        let filenames: HashSet<&str> = self.file_diffs.iter().map(|f| f.filename.as_str()).collect();
-        self.annotations.retain(|ann| filenames.contains(ann.filename.as_str()));
+        let filenames: HashSet<&str> = self
+            .file_diffs
+            .iter()
+            .map(|f| f.filename.as_str())
+            .collect();
+        self.annotations
+            .retain(|ann| filenames.contains(ann.filename.as_str()));
 
         // Convert viewed filenames back to indices in the new file_diffs
         self.viewed_files = self
@@ -785,7 +802,13 @@ impl AppState {
     }
 
     /// Add a new annotation, returns its id
-    pub fn add_annotation(&mut self, filename: String, target: AnnotationTarget, content: String, created_at: SystemTime) -> u64 {
+    pub fn add_annotation(
+        &mut self,
+        filename: String,
+        target: AnnotationTarget,
+        content: String,
+        created_at: SystemTime,
+    ) -> u64 {
         let id = self.annotation_next_id;
         self.annotation_next_id += 1;
         self.annotations.push(Annotation {
@@ -831,7 +854,12 @@ impl AppState {
                 AnnotationTarget::File => {
                     result.push_str(&format!("**{}**\n\n", ann.filename));
                 }
-                AnnotationTarget::LineRange { panel, start_line, end_line, .. } => {
+                AnnotationTarget::LineRange {
+                    panel,
+                    start_line,
+                    end_line,
+                    ..
+                } => {
                     let side = match panel {
                         DiffPanelFocus::Old => "LEFT",
                         _ => "RIGHT",
@@ -968,7 +996,9 @@ mod tests {
 
         let state = AppState::new(diffs, Some("ccc.rs"));
 
-        if let Some(SidebarItem::File { file_index, .. }) = state.sidebar_item_at_visible(state.sidebar_selected) {
+        if let Some(SidebarItem::File { file_index, .. }) =
+            state.sidebar_item_at_visible(state.sidebar_selected)
+        {
             assert_eq!(*file_index, state.current_file);
         } else {
             panic!("sidebar_selected should point to a file");

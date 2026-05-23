@@ -3,11 +3,12 @@ use tree_sitter_highlight::HighlightConfiguration;
 
 use super::queries::*;
 
-// Elixir uses the bundled highlight queries from tree-sitter-elixir
 const ELIXIR_HIGHLIGHTS: &str = tree_sitter_elixir::HIGHLIGHTS_QUERY;
+const XML_HIGHLIGHTS: &str = tree_sitter_xml::XML_HIGHLIGHT_QUERY;
 
 pub const HIGHLIGHT_NAMES: &[&str] = &[
     "attribute",
+    "boolean",
     "comment",
     "constant",
     "constant.builtin",
@@ -18,6 +19,10 @@ pub const HIGHLIGHT_NAMES: &[&str] = &[
     "function.macro",
     "keyword",
     "label",
+    "markup",
+    "markup.heading",
+    "markup.link",
+    "markup.raw",
     "module",
     "number",
     "operator",
@@ -27,6 +32,7 @@ pub const HIGHLIGHT_NAMES: &[&str] = &[
     "punctuation.delimiter",
     "string",
     "string.special",
+    "string.special.symbol",
     "tag",
     "type",
     "type.builtin",
@@ -34,199 +40,256 @@ pub const HIGHLIGHT_NAMES: &[&str] = &[
     "variable.builtin",
     "variable.parameter",
     "variable.member",
+    "embedded",
+    "error",
 ];
 
 pub struct LanguageConfig {
+    #[cfg(test)]
+    pub name: &'static str,
     pub config: HighlightConfiguration,
+    extensions: &'static [&'static str],
+    exact_filenames: &'static [&'static str],
 }
 
-fn load_config(
+impl LanguageConfig {
+    pub fn matches_extension(&self, extension: &str) -> bool {
+        self.extensions.contains(&extension)
+    }
+
+    pub fn matches_filename(&self, filename: &str) -> bool {
+        self.exact_filenames.contains(&filename)
+    }
+}
+
+struct LanguageSpec {
     language: tree_sitter::Language,
-    name: &str,
-    highlights: &str,
-    ext: &'static str,
-    configs: &mut Vec<(&'static str, LanguageConfig)>,
-) {
-    match HighlightConfiguration::new(language, name, highlights, "", "") {
+    name: &'static str,
+    highlights: &'static str,
+    extensions: &'static [&'static str],
+    exact_filenames: &'static [&'static str],
+}
+
+fn load_config(spec: LanguageSpec, configs: &mut Vec<LanguageConfig>) {
+    match HighlightConfiguration::new(spec.language, spec.name, spec.highlights, "", "") {
         Ok(mut config) => {
             config.configure(HIGHLIGHT_NAMES);
-            configs.push((ext, LanguageConfig { config }));
+            configs.push(LanguageConfig {
+                #[cfg(test)]
+                name: spec.name,
+                config,
+                extensions: spec.extensions,
+                exact_filenames: spec.exact_filenames,
+            });
         }
         Err(_e) => {
             #[cfg(debug_assertions)]
-            eprintln!("[WARN] Failed to load {} highlight config: {:?}", name, _e);
+            eprintln!(
+                "[WARN] Failed to load {} highlight config: {:?}",
+                spec.name, _e
+            );
         }
     }
 }
 
-pub static CONFIGS: Lazy<Vec<(&'static str, LanguageConfig)>> = Lazy::new(|| {
+pub static CONFIGS: Lazy<Vec<LanguageConfig>> = Lazy::new(|| {
     let mut configs = Vec::new();
 
     load_config(
-        tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-        "typescript",
-        TS_HIGHLIGHTS,
-        "ts",
+        LanguageSpec {
+            language: tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            name: "typescript",
+            highlights: TS_HIGHLIGHTS,
+            extensions: &["ts", "mts", "cts"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_typescript::LANGUAGE_TSX.into(),
-        "tsx",
-        TSX_HIGHLIGHTS,
-        "tsx",
+        LanguageSpec {
+            language: tree_sitter_typescript::LANGUAGE_TSX.into(),
+            name: "tsx",
+            highlights: TSX_HIGHLIGHTS,
+            extensions: &["tsx"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_javascript::LANGUAGE.into(),
-        "javascript",
-        JS_HIGHLIGHTS,
-        "js",
+        LanguageSpec {
+            language: tree_sitter_javascript::LANGUAGE.into(),
+            name: "javascript",
+            highlights: JS_HIGHLIGHTS,
+            extensions: &["js", "jsx", "mjs", "cjs"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_javascript::LANGUAGE.into(),
-        "javascript",
-        JS_HIGHLIGHTS,
-        "jsx",
+        LanguageSpec {
+            language: tree_sitter_rust::LANGUAGE.into(),
+            name: "rust",
+            highlights: RUST_HIGHLIGHTS,
+            extensions: &["rs"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_rust::LANGUAGE.into(),
-        "rust",
-        RUST_HIGHLIGHTS,
-        "rs",
+        LanguageSpec {
+            language: tree_sitter_json::LANGUAGE.into(),
+            name: "json",
+            highlights: JSON_HIGHLIGHTS,
+            extensions: &["json"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_json::LANGUAGE.into(),
-        "json",
-        JSON_HIGHLIGHTS,
-        "json",
+        LanguageSpec {
+            language: tree_sitter_python::LANGUAGE.into(),
+            name: "python",
+            highlights: PYTHON_HIGHLIGHTS,
+            extensions: &["py", "pyw"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_python::LANGUAGE.into(),
-        "python",
-        PYTHON_HIGHLIGHTS,
-        "py",
+        LanguageSpec {
+            language: tree_sitter_go::LANGUAGE.into(),
+            name: "go",
+            highlights: GO_HIGHLIGHTS,
+            extensions: &["go"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_go::LANGUAGE.into(),
-        "go",
-        GO_HIGHLIGHTS,
-        "go",
+        LanguageSpec {
+            language: tree_sitter_css::LANGUAGE.into(),
+            name: "css",
+            highlights: CSS_HIGHLIGHTS,
+            extensions: &["css"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_css::LANGUAGE.into(),
-        "css",
-        CSS_HIGHLIGHTS,
-        "css",
+        LanguageSpec {
+            language: tree_sitter_html::LANGUAGE.into(),
+            name: "html",
+            highlights: HTML_HIGHLIGHTS,
+            extensions: &["html", "htm"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_html::LANGUAGE.into(),
-        "html",
-        HTML_HIGHLIGHTS,
-        "html",
+        LanguageSpec {
+            language: tree_sitter_toml_ng::LANGUAGE.into(),
+            name: "toml",
+            highlights: TOML_HIGHLIGHTS,
+            extensions: &["toml"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_toml_ng::LANGUAGE.into(),
-        "toml",
-        TOML_HIGHLIGHTS,
-        "toml",
+        LanguageSpec {
+            language: tree_sitter_bash::LANGUAGE.into(),
+            name: "bash",
+            highlights: BASH_HIGHLIGHTS,
+            extensions: &["sh", "bash", "zsh", "ksh", "bats"],
+            exact_filenames: &[".bashrc", ".bash_profile", ".zshrc", ".profile"],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_bash::LANGUAGE.into(),
-        "bash",
-        BASH_HIGHLIGHTS,
-        "sh",
+        LanguageSpec {
+            language: tree_sitter_md::LANGUAGE.into(),
+            name: "markdown",
+            highlights: MD_HIGHLIGHTS,
+            extensions: &["md", "mdx", "markdown"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_bash::LANGUAGE.into(),
-        "bash",
-        BASH_HIGHLIGHTS,
-        "bash",
+        LanguageSpec {
+            language: tree_sitter_c_sharp::LANGUAGE.into(),
+            name: "c_sharp",
+            highlights: CSHARP_HIGHLIGHTS,
+            extensions: &["cs", "csx"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_md::LANGUAGE.into(),
-        "markdown",
-        MD_HIGHLIGHTS,
-        "md",
+        LanguageSpec {
+            language: tree_sitter_java::LANGUAGE.into(),
+            name: "java",
+            highlights: JAVA_HIGHLIGHTS,
+            extensions: &["java"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_md::LANGUAGE.into(),
-        "markdown",
-        MD_HIGHLIGHTS,
-        "mdx",
+        LanguageSpec {
+            language: tree_sitter_ruby::LANGUAGE.into(),
+            name: "ruby",
+            highlights: RUBY_HIGHLIGHTS,
+            extensions: &["rb", "rake", "gemspec"],
+            exact_filenames: &["Gemfile", "Rakefile"],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_c_sharp::LANGUAGE.into(),
-        "c_sharp",
-        CSHARP_HIGHLIGHTS,
-        "cs",
+        LanguageSpec {
+            language: tree_sitter_elixir::LANGUAGE.into(),
+            name: "elixir",
+            highlights: ELIXIR_HIGHLIGHTS,
+            extensions: &["ex", "exs"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_java::LANGUAGE.into(),
-        "java",
-        JAVA_HIGHLIGHTS,
-        "java",
+        LanguageSpec {
+            language: tree_sitter_zig::LANGUAGE.into(),
+            name: "zig",
+            highlights: ZIG_HIGHLIGHTS,
+            extensions: &["zig"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 
     load_config(
-        tree_sitter_ruby::LANGUAGE.into(),
-        "ruby",
-        RUBY_HIGHLIGHTS,
-        "rb",
-        &mut configs,
-    );
-
-    load_config(
-        tree_sitter_elixir::LANGUAGE.into(),
-        "elixir",
-        ELIXIR_HIGHLIGHTS,
-        "ex",
-        &mut configs,
-    );
-
-    load_config(
-        tree_sitter_elixir::LANGUAGE.into(),
-        "elixir",
-        ELIXIR_HIGHLIGHTS,
-        "exs",
-        &mut configs,
-    );
-
-    load_config(
-        tree_sitter_zig::LANGUAGE.into(),
-        "zig",
-        ZIG_HIGHLIGHTS,
-        "zig",
+        LanguageSpec {
+            language: tree_sitter_xml::LANGUAGE_XML.into(),
+            name: "xml",
+            highlights: XML_HIGHLIGHTS,
+            extensions: &["xml", "xsd", "xsl", "xslt", "svg", "rss"],
+            exact_filenames: &[],
+        },
         &mut configs,
     );
 

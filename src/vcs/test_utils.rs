@@ -40,7 +40,9 @@ pub fn git(dir: &Path, args: &[&str]) {
 
     match args[0] {
         "init" => {
-            Repository::init(dir).expect("failed to init repo");
+            let repo = Repository::init(dir).expect("failed to init repo");
+            repo.set_head("refs/heads/main")
+                .expect("failed to set default branch");
         }
         "config" if args.len() >= 3 => {
             let repo = Repository::open(dir).expect("failed to open repo");
@@ -152,7 +154,7 @@ impl RepoGuard {
             Err(poisoned) => poisoned.into_inner(),
         };
         let original = env::current_dir().expect("failed to get cwd");
-        let dir = make_temp_dir("lumen-test");
+        let dir = make_temp_dir("divergent-test");
 
         // Initialize repo with git2
         let repo = Repository::init(&dir).expect("failed to init repo");
@@ -181,18 +183,24 @@ impl RepoGuard {
         // Create initial commit
         let sig =
             Signature::now("Test User", "test@example.com").expect("failed to create signature");
-        repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            "init",
-            &tree,
-            &[], // No parents for initial commit
-        )
-        .expect("failed to create commit");
+        let commit_oid = repo
+            .commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                "init",
+                &tree,
+                &[], // No parents for initial commit
+            )
+            .expect("failed to create commit");
 
-        // Need to also set up main branch ref (git2 doesn't auto-create it on first commit like CLI)
-        // The commit above should have already created HEAD pointing to the commit
+        let commit = repo
+            .find_commit(commit_oid)
+            .expect("failed to find initial commit");
+        repo.branch("main", &commit, true)
+            .expect("failed to create main branch");
+        repo.set_head("refs/heads/main")
+            .expect("failed to set HEAD to main");
 
         env::set_current_dir(&dir).expect("failed to set cwd");
 
@@ -231,7 +239,7 @@ impl JjRepoGuard {
             Err(poisoned) => poisoned.into_inner(),
         };
         let original = env::current_dir().expect("failed to get cwd");
-        let dir = make_temp_dir("lumen-jj-test");
+        let dir = make_temp_dir("divergent-jj-test");
 
         // Initialize jj repo using CLI (for test setup only)
         if !jj(&dir, &["git", "init"]) {

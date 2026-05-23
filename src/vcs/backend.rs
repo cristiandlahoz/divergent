@@ -39,8 +39,8 @@ pub struct StackedCommitInfo {
 }
 
 /// Information about a commit from any VCS.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Fields used by git_entity::Commit::from_commit_info
 pub struct CommitInfo {
     /// The commit ID (git SHA or jj commit ID)
     pub commit_id: String,

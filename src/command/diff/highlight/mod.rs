@@ -16,8 +16,8 @@ pub fn highlight_color(index: usize) -> Color {
     match HIGHLIGHT_NAMES.get(index) {
         Some(&"comment") => syntax.comment,
         Some(&"keyword") => syntax.keyword,
-        Some(&"string" | &"string.special") => syntax.string,
-        Some(&"number" | &"constant" | &"constant.builtin") => syntax.number,
+        Some(&"string" | &"string.special" | &"string.special.symbol") => syntax.string,
+        Some(&"number" | &"constant" | &"constant.builtin" | &"boolean") => syntax.number,
         Some(&"function" | &"function.builtin" | &"function.method") => syntax.function,
         Some(&"function.macro") => syntax.function_macro,
         Some(&"type" | &"type.builtin" | &"constructor") => syntax.r#type,
@@ -28,6 +28,11 @@ pub fn highlight_color(index: usize) -> Color {
         Some(&"tag") => syntax.tag,
         Some(&"attribute") => syntax.attribute,
         Some(&"label") => syntax.label,
+        Some(&"markup" | &"markup.raw") => syntax.default_text,
+        Some(&"markup.heading") => syntax.keyword,
+        Some(&"markup.link") => syntax.string,
+        Some(&"embedded") => syntax.function,
+        Some(&"error") => syntax.variable_builtin,
         Some(&"punctuation" | &"punctuation.bracket" | &"punctuation.delimiter") => {
             syntax.punctuation
         }
@@ -36,8 +41,17 @@ pub fn highlight_color(index: usize) -> Color {
 }
 
 fn get_config_for_file(filename: &str) -> Option<&'static LanguageConfig> {
-    let ext = Path::new(filename).extension().and_then(|e| e.to_str())?;
-    CONFIGS.iter().find(|(e, _)| *e == ext).map(|(_, c)| c)
+    let path = Path::new(filename);
+    let file_name = path.file_name().and_then(|name| name.to_str());
+    if let Some(config) =
+        file_name.and_then(|name| CONFIGS.iter().find(|config| config.matches_filename(name)))
+    {
+        return Some(config);
+    }
+
+    let ext = path.extension().and_then(|e| e.to_str())?;
+    let ext = ext.to_ascii_lowercase();
+    CONFIGS.iter().find(|config| config.matches_extension(&ext))
 }
 
 fn highlight_code(code: &str, filename: &str) -> Vec<(String, Option<usize>)> {
@@ -209,11 +223,6 @@ pub fn highlight_line_spans<'a>(line: &str, filename: &str, bg: Option<Color>) -
 
 pub fn init() {
     let _ = &*CONFIGS;
-    #[cfg(debug_assertions)]
-    {
-        let extensions: Vec<&str> = CONFIGS.iter().map(|(ext, _)| *ext).collect();
-        eprintln!("[DEBUG] Loaded highlight configs for: {:?}", extensions);
-    }
 }
 
 #[cfg(test)]
@@ -222,24 +231,74 @@ mod tests {
 
     #[test]
     fn test_all_configs_load() {
-        let extensions: Vec<&str> = CONFIGS.iter().map(|(ext, _)| *ext).collect();
-        assert!(extensions.contains(&"rs"), "Rust config should be loaded");
-        assert!(
-            extensions.contains(&"ts"),
-            "TypeScript config should be loaded"
+        assert_eq!(get_config_for_file("main.rs").map(|c| c.name), Some("rust"));
+        assert_eq!(
+            get_config_for_file("component.tsx").map(|c| c.name),
+            Some("tsx")
         );
-        assert!(extensions.contains(&"tsx"), "TSX config should be loaded");
-        assert!(
-            extensions.contains(&"js"),
-            "JavaScript config should be loaded"
+        assert_eq!(
+            get_config_for_file("script.js").map(|c| c.name),
+            Some("javascript")
         );
-        assert!(extensions.contains(&"java"), "Java config should be loaded");
-        assert!(extensions.contains(&"py"), "Python config should be loaded");
-        assert!(extensions.contains(&"go"), "Go config should be loaded");
-        assert!(extensions.contains(&"json"), "JSON config should be loaded");
-        assert!(extensions.contains(&"ex"), "Elixir config should be loaded");
-        assert!(extensions.contains(&"exs"), "Elixir script config should be loaded");
-        assert!(extensions.contains(&"zig"), "Zig config should be loaded");
+        assert_eq!(
+            get_config_for_file("Example.java").map(|c| c.name),
+            Some("java")
+        );
+        assert_eq!(
+            get_config_for_file("script.py").map(|c| c.name),
+            Some("python")
+        );
+        assert_eq!(get_config_for_file("main.go").map(|c| c.name), Some("go"));
+        assert_eq!(
+            get_config_for_file("data.json").map(|c| c.name),
+            Some("json")
+        );
+        assert_eq!(
+            get_config_for_file("mix.exs").map(|c| c.name),
+            Some("elixir")
+        );
+        assert_eq!(get_config_for_file("main.zig").map(|c| c.name), Some("zig"));
+        assert_eq!(
+            get_config_for_file("layout.xml").map(|c| c.name),
+            Some("xml")
+        );
+    }
+
+    #[test]
+    fn test_extension_aliases_resolve_to_compiled_grammars() {
+        let cases = [
+            ("index.mjs", "javascript"),
+            ("index.cjs", "javascript"),
+            ("mod.mts", "typescript"),
+            ("mod.cts", "typescript"),
+            ("tool.pyw", "python"),
+            ("setup.zsh", "bash"),
+            ("test.bats", "bash"),
+            ("README.markdown", "markdown"),
+            ("task.rake", "ruby"),
+            ("plugin.gemspec", "ruby"),
+            ("script.csx", "c_sharp"),
+            ("schema.xsd", "xml"),
+            ("transform.xslt", "xml"),
+            ("icon.svg", "xml"),
+            ("UPPER.TS", "typescript"),
+            (".zshrc", "bash"),
+            ("Gemfile", "ruby"),
+        ];
+
+        for (filename, expected) in cases {
+            assert_eq!(
+                get_config_for_file(filename).map(|c| c.name),
+                Some(expected),
+                "{filename} should resolve to {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_unknown_extension_falls_back_to_plain_text() {
+        assert!(get_config_for_file("notes.xdiv").is_none());
+        assert!(get_config_for_file("settings.jsonc").is_none());
     }
 
     #[test]
@@ -299,7 +358,10 @@ function hello(): string {
 end
 "#;
         let result = highlight_code(code, "test.ex");
-        assert!(!result.is_empty(), "Elixir highlighting should produce output");
+        assert!(
+            !result.is_empty(),
+            "Elixir highlighting should produce output"
+        );
         let has_highlights = result.iter().any(|(_, h)| h.is_some());
         assert!(has_highlights, "Elixir code should have syntax highlights");
     }
@@ -314,17 +376,28 @@ pub fn main() !void {
 }
 "#;
         let result = highlight_code(code, "test.zig");
-        assert!(
-            !result.is_empty(),
-            "Zig highlighting should produce output"
-        );
+        assert!(!result.is_empty(), "Zig highlighting should produce output");
         let has_highlights = result.iter().any(|(_, h)| h.is_some());
         assert!(has_highlights, "Zig code should have syntax highlights");
     }
 
     #[test]
+    fn test_xml_highlighting() {
+        let code = r#"<?xml version="1.0"?>
+<note priority="high">
+  <to>Tove</to>
+  <!-- hello -->
+</note>
+"#;
+        let result = highlight_code(code, "note.xml");
+        assert!(!result.is_empty(), "XML highlighting should produce output");
+        let has_highlights = result.iter().any(|(_, h)| h.is_some());
+        assert!(has_highlights, "XML code should have syntax highlights");
+    }
+
+    #[test]
     fn test_java_highlighting() {
-        let code = r#"package dev.lumen;
+        let code = r#"package dev.divergent;
 
 import java.util.List;
 

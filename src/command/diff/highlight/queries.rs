@@ -923,7 +923,7 @@ pub const JAVA_HIGHLIGHTS: &str = r#"
 
 /*
 Portions of `ZIG_HIGHLIGHTS` are adapted from tree-sitter-zig 1.1.2
-`queries/highlights.scm` and remapped to Lumen's supported capture names.
+`queries/highlights.scm` and remapped to Divergent's supported capture names.
 
 Upstream project: https://github.com/tree-sitter-grammars/tree-sitter-zig
 

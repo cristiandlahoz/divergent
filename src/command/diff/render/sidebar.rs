@@ -8,35 +8,35 @@ use ratatui::{
 use crate::command::diff::theme;
 use crate::command::diff::types::{FileStatus, SidebarItem};
 
-#[allow(clippy::too_many_arguments)]
-pub fn render_sidebar(
-    frame: &mut Frame,
-    area: Rect,
-    sidebar_items: &[SidebarItem],
-    sidebar_visible: &[usize],
-    collapsed_dirs: &HashSet<String>,
-    current_file: usize,
-    sidebar_selected: usize,
-    sidebar_scroll: usize,
-    sidebar_h_scroll: u16,
-    viewed_files: &HashSet<usize>,
-    is_focused: bool,
-) {
+pub struct SidebarRenderInput<'a> {
+    pub items: &'a [SidebarItem],
+    pub visible: &'a [usize],
+    pub collapsed_dirs: &'a HashSet<String>,
+    pub current_file: usize,
+    pub selected: usize,
+    pub scroll: usize,
+    pub h_scroll: u16,
+    pub viewed_files: &'a HashSet<usize>,
+    pub is_focused: bool,
+}
+
+pub fn render_sidebar(frame: &mut Frame, area: Rect, input: SidebarRenderInput<'_>) {
     let t = theme::get();
     let bg = t.ui.bg;
     let visible_height = area.height.saturating_sub(2) as usize;
-    let lines: Vec<Line> = sidebar_visible
+    let lines: Vec<Line> = input
+        .visible
         .iter()
         .enumerate()
         .map(|(i, item_idx)| {
-            let item = &sidebar_items[*item_idx];
+            let item = &input.items[*item_idx];
             let (prefix, status_symbol, status_color, name, is_current_file, is_viewed) = match item
             {
                 SidebarItem::Directory {
                     name, path, depth, ..
                 } => {
                     let indent = "  ".repeat(*depth);
-                    let all_children_viewed = sidebar_items.iter().all(|child| {
+                    let all_children_viewed = input.items.iter().all(|child| {
                         if let SidebarItem::File {
                             path: file_path,
                             file_index,
@@ -44,12 +44,12 @@ pub fn render_sidebar(
                         } = child
                         {
                             if file_path.starts_with(&format!("{}/", path)) {
-                                return viewed_files.contains(file_index);
+                                return input.viewed_files.contains(file_index);
                             }
                         }
                         true
                     });
-                    let has_children = sidebar_items.iter().any(|child| {
+                    let has_children = input.items.iter().any(|child| {
                         if let SidebarItem::File {
                             path: file_path, ..
                         } = child
@@ -65,7 +65,7 @@ pub fn render_sidebar(
                         "  "
                     };
                     let status_symbol = if has_children {
-                        if collapsed_dirs.contains(path) {
+                        if input.collapsed_dirs.contains(path) {
                             "▶"
                         } else {
                             "▼"
@@ -90,7 +90,7 @@ pub fn render_sidebar(
                     ..
                 } => {
                     let indent = "  ".repeat(*depth);
-                    let viewed = viewed_files.contains(file_index);
+                    let viewed = input.viewed_files.contains(file_index);
                     let marker = if viewed { "✓ " } else { "  " };
                     let status_color = match status {
                         FileStatus::Modified => Some(t.ui.status_modified),
@@ -103,19 +103,21 @@ pub fn render_sidebar(
                         status_symbol,
                         status_color,
                         format!(" {}", name),
-                        *file_index == current_file,
+                        *file_index == input.current_file,
                         viewed,
                     )
                 }
             };
 
-            let is_selected = i == sidebar_selected;
+            let is_selected = i == input.selected;
             let base_style = if is_selected {
-                Style::default().fg(t.ui.selection_fg).bg(if is_focused {
-                    t.ui.selection_bg
-                } else {
-                    t.ui.border_unfocused
-                })
+                Style::default()
+                    .fg(t.ui.selection_fg)
+                    .bg(if input.is_focused {
+                        t.ui.selection_bg
+                    } else {
+                        t.ui.border_unfocused
+                    })
             } else if is_current_file {
                 Style::default().fg(t.ui.highlight)
             } else if is_viewed {
@@ -140,7 +142,7 @@ pub fn render_sidebar(
         })
         .collect();
 
-    let title_style = if is_focused {
+    let title_style = if input.is_focused {
         Style::default().fg(t.ui.border_focused)
     } else {
         Style::default().fg(t.ui.border_unfocused)
@@ -149,13 +151,13 @@ pub fn render_sidebar(
 
     let visible_lines: Vec<Line> = lines
         .into_iter()
-        .skip(sidebar_scroll)
+        .skip(input.scroll)
         .take(visible_height)
         .collect();
 
     let para = Paragraph::new(visible_lines)
         .style(Style::default().bg(bg))
-        .scroll((0, sidebar_h_scroll))
+        .scroll((0, input.h_scroll))
         .block(
             Block::default()
                 .title(Line::styled(" [1] Files ", title_style))

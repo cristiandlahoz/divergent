@@ -1,15 +1,64 @@
 use std::str::FromStr;
 use thiserror::Error;
 
+/// A revision expression normalized into the comparison shape Divergent needs.
+///
+/// Divergent accepts both Git and jj-ish references here because the parser's
+/// job is only to preserve user intent. Backend-specific validation happens
+/// later, where error messages can include backend-specific advice.
+///
+/// # Examples
+///
+/// Open a single revision:
+///
+/// ```
+/// use divergent::commit_reference::CommitReference;
+///
+/// let reference: CommitReference = "HEAD".parse()?;
+/// assert_eq!(reference, CommitReference::Single("HEAD".to_string()));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Missing sides of a range mean "compare against `HEAD`", matching Git's
+/// command-line shorthand instead of inventing a Divergent-only grammar.
+///
+/// ```
+/// use divergent::commit_reference::CommitReference;
+///
+/// let reference: CommitReference = "..feature".parse()?;
+/// assert_eq!(
+///     reference,
+///     CommitReference::Range {
+///         from: "HEAD".to_string(),
+///         to: "feature".to_string(),
+///     }
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CommitReference {
+    /// One revision or symbolic reference, such as `HEAD`, `@`, or a SHA.
     Single(String),
-    Range { from: String, to: String },
-    TripleDots { from: String, to: String },
+    /// A two-dot comparison where both sides should be resolved by the backend.
+    Range {
+        /// Left side of the comparison, defaulted to `HEAD` when omitted.
+        from: String,
+        /// Right side of the comparison, defaulted to `HEAD` when omitted.
+        to: String,
+    },
+    /// A three-dot comparison, usually meaning "from merge base to target".
+    TripleDots {
+        /// Merge-base side requested by the user.
+        from: String,
+        /// Target side requested by the user.
+        to: String,
+    },
 }
 
+/// Why a command-line revision expression could not become a `CommitReference`.
 #[derive(Debug, Error)]
 pub enum ReferenceParseError {
+    /// Empty input is rejected so callers do not accidentally treat it as `HEAD`.
     #[error("empty reference string")]
     Empty,
 }

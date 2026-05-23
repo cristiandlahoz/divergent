@@ -1,5 +1,22 @@
 use crate::command::diff::types::{DiffFullscreen, DiffLine, DiffPanelFocus};
 
+/// Names every coordinate space involved in hit-testing a rendered diff line.
+///
+/// Mouse input arrives in terminal coordinates, while selections live in the
+/// side-by-side diff model. Bundling these values prevents future call sites
+/// from silently swapping scroll, header, or context offsets.
+#[allow(dead_code)]
+pub struct ContentHitTest<'a> {
+    pub x: u16,
+    pub y: u16,
+    pub panel: DiffPanelFocus,
+    pub scroll: u16,
+    pub h_scroll: u16,
+    pub content_start_y: u16,
+    pub side_by_side: &'a [DiffLine],
+    pub context_line_count: usize,
+}
+
 /// Layout information for the diff panels
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -61,7 +78,9 @@ impl PanelLayout {
                 let old_width = half_width.saturating_sub(border_width);
                 // New panel shares border with old panel
                 let new_x = diff_area_start + half_width;
-                let new_width = diff_area_width.saturating_sub(half_width).saturating_sub(border_width);
+                let new_width = diff_area_width
+                    .saturating_sub(half_width)
+                    .saturating_sub(border_width);
                 (old_x, old_width, new_x, new_width)
             }
         };
@@ -84,23 +103,35 @@ impl PanelLayout {
     pub fn panel_at_x(&self, x: u16) -> Option<DiffPanelFocus> {
         match self.diff_fullscreen {
             DiffFullscreen::OldOnly => {
-                if self.old_panel_width > 0 && x >= self.old_panel_x && x < self.old_panel_x + self.old_panel_width {
+                if self.old_panel_width > 0
+                    && x >= self.old_panel_x
+                    && x < self.old_panel_x + self.old_panel_width
+                {
                     Some(DiffPanelFocus::Old)
                 } else {
                     None
                 }
             }
             DiffFullscreen::NewOnly => {
-                if self.new_panel_width > 0 && x >= self.new_panel_x && x < self.new_panel_x + self.new_panel_width {
+                if self.new_panel_width > 0
+                    && x >= self.new_panel_x
+                    && x < self.new_panel_x + self.new_panel_width
+                {
                     Some(DiffPanelFocus::New)
                 } else {
                     None
                 }
             }
             DiffFullscreen::None => {
-                if self.old_panel_width > 0 && x >= self.old_panel_x && x < self.old_panel_x + self.old_panel_width {
+                if self.old_panel_width > 0
+                    && x >= self.old_panel_x
+                    && x < self.old_panel_x + self.old_panel_width
+                {
                     Some(DiffPanelFocus::Old)
-                } else if self.new_panel_width > 0 && x >= self.new_panel_x && x < self.new_panel_x + self.new_panel_width {
+                } else if self.new_panel_width > 0
+                    && x >= self.new_panel_x
+                    && x < self.new_panel_x + self.new_panel_width
+                {
                     Some(DiffPanelFocus::New)
                 } else {
                     None
@@ -163,22 +194,13 @@ impl PanelLayout {
         }
     }
 
-    /// Convert screen coordinates to content position
+    /// Convert screen coordinates to content position.
+    ///
+    /// Returns `None` for coordinates that point at chrome, context rows, or
+    /// outside the currently materialized diff model.
     #[allow(dead_code)]
-    /// Returns None if the position is not valid (e.g., empty placeholder line)
-    pub fn screen_to_content(
-        &self,
-        x: u16,
-        y: u16,
-        panel: DiffPanelFocus,
-        scroll: u16,
-        h_scroll: u16,
-        _header_height: u16,
-        content_start_y: u16,
-        side_by_side: &[DiffLine],
-        context_line_count: usize,
-    ) -> Option<(usize, usize)> {
-        let (panel_x, panel_width) = match panel {
+    pub fn screen_to_content(&self, hit: ContentHitTest<'_>) -> Option<(usize, usize)> {
+        let (panel_x, panel_width) = match hit.panel {
             DiffPanelFocus::Old => (self.old_panel_x, self.old_panel_width),
             DiffPanelFocus::New => (self.new_panel_x, self.new_panel_width),
             DiffPanelFocus::None => return None,
@@ -190,27 +212,27 @@ impl PanelLayout {
 
         // Calculate line index from y coordinate
         // y is in screen coordinates, need to account for header and content area
-        if y < content_start_y {
+        if hit.y < hit.content_start_y {
             return None;
         }
 
-        let rel_y = (y - content_start_y) as usize;
+        let rel_y = (hit.y - hit.content_start_y) as usize;
 
         // Skip context lines at top
-        if rel_y < context_line_count {
+        if rel_y < hit.context_line_count {
             return None; // Click on context line
         }
 
-        let content_rel_y = rel_y - context_line_count;
-        let line_idx = scroll as usize + content_rel_y;
+        let content_rel_y = rel_y - hit.context_line_count;
+        let line_idx = hit.scroll as usize + content_rel_y;
 
-        if line_idx >= side_by_side.len() {
+        if line_idx >= hit.side_by_side.len() {
             return None;
         }
 
         // Calculate column from x coordinate
-        let rel_x = x.saturating_sub(panel_x);
-        let content_offset = self.content_x_offset(panel);
+        let rel_x = hit.x.saturating_sub(panel_x);
+        let content_offset = self.content_x_offset(hit.panel);
 
         if rel_x < content_offset {
             // Click is in gutter area, column 0
@@ -218,7 +240,7 @@ impl PanelLayout {
         }
 
         let content_x = rel_x - content_offset;
-        let column = (content_x + h_scroll) as usize;
+        let column = (content_x + hit.h_scroll) as usize;
 
         Some((line_idx, column))
     }

@@ -1,3 +1,11 @@
+//! Interactive diff orchestration.
+//!
+//! This module is intentionally the boundary between command-line intent and
+//! terminal state. Parsing, backend selection, PR metadata, and watch-mode
+//! reloads are gathered here before the renderer starts mutating terminal
+//! buffers. Keeping that boundary explicit makes the render modules easier to
+//! reason about: they receive a loaded model instead of discovering the world.
+
 mod annotation;
 mod app;
 mod context;
@@ -23,14 +31,44 @@ use spinoff::{spinners, Color, Spinner};
 use crate::commit_reference::CommitReference;
 use crate::vcs::VcsBackend;
 
+/// Everything the diff UI needs before it takes over the terminal.
+///
+/// Keeping this struct small is intentional: Divergent has no hidden config
+/// layer, so command-line intent flows directly into the renderer.
+///
+/// # Example
+///
+/// The common working-tree view carries no reference or PR context:
+///
+/// ```
+/// # use divergent::commit_reference::CommitReference;
+/// # struct DiffOptions {
+/// #     reference: Option<CommitReference>,
+/// #     pr: Option<String>,
+/// #     file: Option<Vec<String>>,
+/// #     watch: bool,
+/// #     stacked: bool,
+/// #     focus: Option<String>,
+/// # }
+/// let options = DiffOptions {
+///     reference: None,
+///     pr: None,
+///     file: None,
+///     watch: false,
+///     stacked: false,
+///     focus: None,
+/// };
+///
+/// assert!(options.reference.is_none());
+/// ```
 pub struct DiffOptions {
     pub reference: Option<CommitReference>,
     pub pr: Option<String>,
     pub file: Option<Vec<String>>,
     pub watch: bool,
-    pub theme: Option<String>,
     pub stacked: bool,
     pub focus: Option<String>,
+    pub theme: theme::ThemeChoice,
 }
 
 #[derive(Clone)]
