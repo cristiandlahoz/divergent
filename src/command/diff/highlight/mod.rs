@@ -1,14 +1,12 @@
 mod config;
 mod queries;
 
-use std::collections::HashMap;
-use std::path::Path;
-
 use ratatui::prelude::*;
+use std::collections::HashMap;
 use tree_sitter_highlight::{HighlightEvent, Highlighter};
 
 use super::theme;
-use config::{get_config_for_extension, LanguageConfig, HIGHLIGHT_NAMES};
+use config::{get_config_for_file, HIGHLIGHT_NAMES};
 
 pub fn highlight_color(index: usize) -> Color {
     let t = theme::get();
@@ -16,8 +14,8 @@ pub fn highlight_color(index: usize) -> Color {
     match HIGHLIGHT_NAMES.get(index) {
         Some(&"comment") => syntax.comment,
         Some(&"keyword") => syntax.keyword,
-        Some(&"string" | &"string.special") => syntax.string,
-        Some(&"number" | &"constant" | &"constant.builtin") => syntax.number,
+        Some(&"string" | &"string.special" | &"string.special.symbol") => syntax.string,
+        Some(&"number" | &"constant" | &"constant.builtin" | &"boolean") => syntax.number,
         Some(&"function" | &"function.builtin" | &"function.method") => syntax.function,
         Some(&"function.macro") => syntax.function_macro,
         Some(&"type" | &"type.builtin" | &"constructor") => syntax.r#type,
@@ -28,16 +26,16 @@ pub fn highlight_color(index: usize) -> Color {
         Some(&"tag") => syntax.tag,
         Some(&"attribute") => syntax.attribute,
         Some(&"label") => syntax.label,
+        Some(&"markup" | &"markup.raw") => syntax.default_text,
+        Some(&"markup.heading") => syntax.keyword,
+        Some(&"markup.link") => syntax.string,
+        Some(&"embedded") => syntax.function,
+        Some(&"error") => syntax.variable_builtin,
         Some(&"punctuation" | &"punctuation.bracket" | &"punctuation.delimiter") => {
             syntax.punctuation
         }
         _ => syntax.default_text,
     }
-}
-
-fn get_config_for_file(filename: &str) -> Option<&'static LanguageConfig> {
-    let ext = Path::new(filename).extension().and_then(|e| e.to_str())?;
-    get_config_for_extension(ext)
 }
 
 fn highlight_code(code: &str, filename: &str) -> Vec<(String, Option<usize>)> {
@@ -236,6 +234,38 @@ mod tests {
         assert!(extensions.contains(&"zig"), "Zig config should be loaded");
         assert!(extensions.contains(&"yaml"), "YAML config should be loaded");
         assert!(extensions.contains(&"yml"), "YML config should be loaded");
+        assert!(extensions.contains(&"xml"), "XML config should be loaded");
+        assert!(extensions.contains(&"svg"), "SVG config should be loaded");
+    }
+
+    #[test]
+    fn test_extension_aliases_resolve_to_compiled_grammars() {
+        let cases = [
+            ("index.mjs", "javascript"),
+            ("index.cjs", "javascript"),
+            ("mod.mts", "typescript"),
+            ("mod.cts", "typescript"),
+            ("tool.pyw", "python"),
+            ("setup.zsh", "bash"),
+            ("test.bats", "bash"),
+            ("README.markdown", "markdown"),
+            ("task.rake", "ruby"),
+            ("plugin.gemspec", "ruby"),
+            ("schema.xsd", "xml"),
+            ("transform.xslt", "xml"),
+            ("icon.svg", "xml"),
+            ("UPPER.YAML", "yaml"),
+            (".zshrc", "bash"),
+            ("Gemfile", "ruby"),
+        ];
+
+        for (filename, expected) in cases {
+            assert_eq!(
+                get_config_for_file(filename).map(|c| c.name),
+                Some(expected),
+                "{filename} should resolve to {expected}"
+            );
+        }
     }
 
     #[test]

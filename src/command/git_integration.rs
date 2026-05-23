@@ -6,13 +6,13 @@ use std::process::Command;
 
 use crate::command::diff::{self, DiffOptions};
 use crate::config::cli::GitCommand;
-use crate::error::LumenError;
+use crate::error::DivergentError;
 use crate::vcs::VcsBackend;
 
 const PAGER_KEY: &str = "pager.diff";
 const CORE_PAGER_KEY: &str = "core.pager";
 
-pub fn execute(command: GitCommand) -> Result<(), LumenError> {
+pub fn execute(command: GitCommand) -> Result<(), DivergentError> {
     match command {
         GitCommand::Install { force, binary } => install(binary, force),
         GitCommand::Uninstall => uninstall(),
@@ -21,13 +21,13 @@ pub fn execute(command: GitCommand) -> Result<(), LumenError> {
     }
 }
 
-pub fn install(binary: Option<PathBuf>, force: bool) -> Result<(), LumenError> {
+pub fn install(binary: Option<PathBuf>, force: bool) -> Result<(), DivergentError> {
     let binary = binary.unwrap_or(std::env::current_exe()?);
     let current = read_pager_value(None)?;
 
     if let Some(value) = current.as_deref() {
         if !is_managed(value) && !force {
-            return Err(LumenError::CommandError(format!(
+            return Err(DivergentError::InvalidInput(format!(
                 "{} is already set to '{}'. Re-run with --force to replace it.",
                 PAGER_KEY, value
             )));
@@ -40,14 +40,14 @@ pub fn install(binary: Option<PathBuf>, force: bool) -> Result<(), LumenError> {
     Ok(())
 }
 
-pub fn uninstall() -> Result<(), LumenError> {
+pub fn uninstall() -> Result<(), DivergentError> {
     match read_pager_value(None)? {
         Some(value) if is_managed(&value) => {
             unset_pager_value(None)?;
             println!("removed divergent global git diff pager");
             Ok(())
         }
-        Some(value) => Err(LumenError::CommandError(format!(
+        Some(value) => Err(DivergentError::InvalidInput(format!(
             "{} is not managed by Divergent: '{}'",
             PAGER_KEY, value
         ))),
@@ -58,7 +58,7 @@ pub fn uninstall() -> Result<(), LumenError> {
     }
 }
 
-pub fn status() -> Result<(), LumenError> {
+pub fn status() -> Result<(), DivergentError> {
     match read_pager_value(None)? {
         Some(value) if is_managed(&value) => println!("installed: {}", value),
         Some(value) => println!("conflict: {} is '{}'", PAGER_KEY, value),
@@ -68,7 +68,7 @@ pub fn status() -> Result<(), LumenError> {
     Ok(())
 }
 
-pub fn doctor() -> Result<(), LumenError> {
+pub fn doctor() -> Result<(), DivergentError> {
     let pager_diff = read_pager_value(None)?;
     let core_pager = read_global_value(CORE_PAGER_KEY, None)?;
     let git_pager = std::env::var("GIT_PAGER").ok();
@@ -90,6 +90,7 @@ pub fn doctor() -> Result<(), LumenError> {
         pager_diff.as_deref().is_some_and(is_managed)
     );
     println!("env may bypass paging: {}", !env_conflicts.is_empty());
+    println!("tty available: {}", tty_available());
     for conflict in env_conflicts {
         println!("warning: {}", conflict);
     }
@@ -103,7 +104,7 @@ pub fn run_pager(
     patch_file: Option<&Path>,
 ) -> io::Result<()> {
     let patch = read_patch(input, patch_file)?;
-    if patch_file.is_none() && !attach_tty_for_tui()? {
+    if !attach_tty_for_tui()? {
         io::stdout().write_all(patch.as_bytes())?;
         return Ok(());
     }
@@ -139,14 +140,14 @@ fn is_managed(value: &str) -> bool {
     value.contains("divergent") && value.contains("git-pager")
 }
 
-fn read_pager_value(git_config_global: Option<&Path>) -> Result<Option<String>, LumenError> {
+fn read_pager_value(git_config_global: Option<&Path>) -> Result<Option<String>, DivergentError> {
     read_global_value(PAGER_KEY, git_config_global)
 }
 
 fn read_global_value(
     key: &str,
     git_config_global: Option<&Path>,
-) -> Result<Option<String>, LumenError> {
+) -> Result<Option<String>, DivergentError> {
     let output = git_command(git_config_global)
         .args(["config", "--global", "--get", key])
         .output()?;
@@ -191,28 +192,28 @@ fn is_conflicting_pager_value(value: &str) -> bool {
         && (value == "cat" || value == "less" || value.contains("hunk") || value.contains("delta"))
 }
 
-fn write_pager_value(git_config_global: Option<&Path>, value: &str) -> Result<(), LumenError> {
+fn write_pager_value(git_config_global: Option<&Path>, value: &str) -> Result<(), DivergentError> {
     let status = git_command(git_config_global)
         .args(["config", "--global", PAGER_KEY, value])
         .status()?;
     if status.success() {
         Ok(())
     } else {
-        Err(LumenError::CommandError(format!(
+        Err(DivergentError::InvalidInput(format!(
             "failed to write global {}",
             PAGER_KEY
         )))
     }
 }
 
-fn unset_pager_value(git_config_global: Option<&Path>) -> Result<(), LumenError> {
+fn unset_pager_value(git_config_global: Option<&Path>) -> Result<(), DivergentError> {
     let status = git_command(git_config_global)
         .args(["config", "--global", "--unset", PAGER_KEY])
         .status()?;
     if status.success() {
         Ok(())
     } else {
-        Err(LumenError::CommandError(format!(
+        Err(DivergentError::InvalidInput(format!(
             "failed to unset global {}",
             PAGER_KEY
         )))
@@ -326,27 +327,39 @@ impl PatchFile {
 
 #[cfg(unix)]
 fn attach_tty_for_tui() -> io::Result<bool> {
-    use std::fs::File;
+    use std::fs::OpenOptions;
     use std::os::fd::AsRawFd;
 
-    if unsafe { libc::isatty(libc::STDOUT_FILENO) != 1 } {
-        return Ok(false);
-    }
-
-    let Ok(tty) = File::open("/dev/tty") else {
+    let Ok(tty) = OpenOptions::new().read(true).write(true).open("/dev/tty") else {
         return Ok(false);
     };
-    let result = unsafe { libc::dup2(tty.as_raw_fd(), libc::STDIN_FILENO) };
-    if result == -1 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(true)
+
+    for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
+        if unsafe { libc::dup2(tty.as_raw_fd(), fd) } == -1 {
+            return Err(io::Error::last_os_error());
+        }
     }
+
+    Ok(true)
 }
 
 #[cfg(not(unix))]
 fn attach_tty_for_tui() -> io::Result<bool> {
     Ok(true)
+}
+
+#[cfg(unix)]
+fn tty_available() -> bool {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .is_ok()
+}
+
+#[cfg(not(unix))]
+fn tty_available() -> bool {
+    true
 }
 
 #[cfg(test)]

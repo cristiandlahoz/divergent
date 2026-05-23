@@ -1,3 +1,4 @@
+use clap::ValueEnum;
 use once_cell::sync::OnceCell;
 use ratatui::prelude::Color;
 use std::str::FromStr;
@@ -10,6 +11,31 @@ pub enum ThemeMode {
     Light,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ThemeChoice {
+    Auto,
+    Default,
+    Tokyonight,
+    Midnight,
+}
+
+impl FromStr for ThemeChoice {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().replace('_', "-").as_str() {
+            "auto" => Ok(Self::Auto),
+            "default" => Ok(Self::Default),
+            "tokyonight" | "tokyo-night" => Ok(Self::Tokyonight),
+            "midnight" | "mid-night" => Ok(Self::Midnight),
+            value => Err(format!(
+                "invalid theme '{value}'. expected one of: auto, default, tokyonight, midnight"
+            )),
+        }
+    }
+}
+
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemePreset {
     Auto,
@@ -28,6 +54,7 @@ pub enum ThemePreset {
     SolarizedLight,
 }
 
+#[cfg(test)]
 impl FromStr for ThemePreset {
     type Err = String;
 
@@ -137,6 +164,14 @@ pub struct Theme {
 }
 
 impl Theme {
+    pub fn from_choice(choice: ThemeChoice) -> Self {
+        match choice {
+            ThemeChoice::Auto => Self::from_mode(ThemeMode::detect()),
+            ThemeChoice::Default | ThemeChoice::Midnight => Self::midnight(),
+            ThemeChoice::Tokyonight => Self::tokyonight(),
+        }
+    }
+
     pub fn dark() -> Self {
         Self {
             mode: ThemeMode::Dark,
@@ -387,7 +422,10 @@ impl Theme {
             ThemeMode::Light => Self::light(),
         }
     }
+}
 
+#[cfg(test)]
+impl Theme {
     pub fn from_preset(preset: ThemePreset) -> Self {
         match preset {
             ThemePreset::Auto => Self::from_mode(ThemeMode::detect()),
@@ -957,23 +995,9 @@ impl Theme {
     }
 }
 
-pub fn init(config_theme: Option<&str>) -> Result<(), String> {
-    // Keep startup deterministic: terminal probing only happens for explicit auto.
-    let theme_name = config_theme
-        .map(|s| s.to_string())
-        .or_else(|| std::env::var("DIVERGENT_THEME").ok())
-        .or_else(|| std::env::var("LUMEN_THEME").ok());
-
-    let theme = if let Some(name) = theme_name {
-        match name.parse::<ThemePreset>() {
-            Ok(preset) => Theme::from_preset(preset),
-            Err(err) => return Err(err),
-        }
-    } else {
-        Theme::midnight()
-    };
+pub fn init(choice: ThemeChoice) {
+    let theme = Theme::from_choice(choice);
     let _ = THEME.set(theme);
-    Ok(())
 }
 
 pub fn get() -> &'static Theme {

@@ -329,9 +329,9 @@ mod tests {
             pr: None,
             file: None,
             watch: false,
-            theme: None,
             stacked: false,
             focus: None,
+            theme: super::super::theme::ThemeChoice::Auto,
         };
 
         let diffs = load_file_diffs(&options, &backend);

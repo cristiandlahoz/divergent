@@ -196,7 +196,7 @@ fn run_app_internal(
     stacked_commits: Option<Vec<StackedCommitInfo>>,
     backend: &dyn VcsBackend,
 ) -> io::Result<()> {
-    theme::init(options.theme.as_deref()).map_err(io::Error::other)?;
+    theme::init(options.theme);
 
     // Initialize state before TUI so we can sync viewed files
     let mut state = AppState::new(file_diffs, options.focus.as_deref());

@@ -154,7 +154,7 @@ impl RepoGuard {
             Err(poisoned) => poisoned.into_inner(),
         };
         let original = env::current_dir().expect("failed to get cwd");
-        let dir = make_temp_dir("lumen-test");
+        let dir = make_temp_dir("divergent-test");
 
         // Initialize repo with git2
         let repo = Repository::init(&dir).expect("failed to init repo");
@@ -237,7 +237,7 @@ impl JjRepoGuard {
             Err(poisoned) => poisoned.into_inner(),
         };
         let original = env::current_dir().expect("failed to get cwd");
-        let dir = make_temp_dir("lumen-jj-test");
+        let dir = make_temp_dir("divergent-jj-test");
 
         // Initialize jj repo using CLI (for test setup only)
         if !jj(&dir, &["git", "init"]) {
