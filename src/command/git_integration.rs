@@ -1,5 +1,3 @@
-use std::ffi::OsStr;
-use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -9,8 +7,7 @@ use crate::config::cli::GitCommand;
 use crate::error::DivergentError;
 use crate::vcs::VcsBackend;
 
-const PAGER_KEY: &str = "pager.diff";
-const CORE_PAGER_KEY: &str = "core.pager";
+const PAGER_KEY: &str = "core.pager";
 
 pub fn execute(command: GitCommand) -> Result<(), DivergentError> {
     match command {
@@ -35,7 +32,7 @@ pub fn install(binary: Option<PathBuf>, force: bool) -> Result<(), DivergentErro
     }
 
     write_pager_value(None, &managed_pager_command(&binary))?;
-    println!("installed divergent as the global git diff pager");
+    println!("installed divergent as the global git pager");
     print_env_warning();
     Ok(())
 }
@@ -44,7 +41,7 @@ pub fn uninstall() -> Result<(), DivergentError> {
     match read_pager_value(None)? {
         Some(value) if is_managed(&value) => {
             unset_pager_value(None)?;
-            println!("removed divergent global git diff pager");
+            println!("removed divergent global git pager");
             Ok(())
         }
         Some(value) => Err(DivergentError::InvalidInput(format!(
@@ -52,7 +49,7 @@ pub fn uninstall() -> Result<(), DivergentError> {
             PAGER_KEY, value
         ))),
         None => {
-            println!("divergent is not installed as the global git diff pager");
+            println!("divergent is not installed as the global git pager");
             Ok(())
         }
     }
@@ -69,16 +66,11 @@ pub fn status() -> Result<(), DivergentError> {
 }
 
 pub fn doctor() -> Result<(), DivergentError> {
-    let pager_diff = read_pager_value(None)?;
-    let core_pager = read_global_value(CORE_PAGER_KEY, None)?;
+    let core_pager = read_pager_value(None)?;
     let git_pager = std::env::var("GIT_PAGER").ok();
     let pager = std::env::var("PAGER").ok();
     let env_conflicts = env_pager_conflicts(git_pager.as_deref(), pager.as_deref());
 
-    println!(
-        "pager.diff: {}",
-        pager_diff.as_deref().unwrap_or("<not set>")
-    );
     println!(
         "core.pager: {}",
         core_pager.as_deref().unwrap_or("<not set>")
@@ -86,11 +78,11 @@ pub fn doctor() -> Result<(), DivergentError> {
     println!("GIT_PAGER: {}", git_pager.as_deref().unwrap_or("<not set>"));
     println!("PAGER: {}", pager.as_deref().unwrap_or("<not set>"));
     println!(
-        "divergent pager.diff: {}",
-        pager_diff.as_deref().is_some_and(is_managed)
+        "divergent core.pager: {}",
+        core_pager.as_deref().is_some_and(is_managed)
     );
     println!("env may bypass paging: {}", !env_conflicts.is_empty());
-    println!("tty available: {}", tty_available());
+    println!("controlling tty available: {}", controlling_tty_available());
     for conflict in env_conflicts {
         println!("warning: {}", conflict);
     }
@@ -101,10 +93,9 @@ pub fn run_pager(
     options: DiffOptions,
     backend: &dyn VcsBackend,
     input: &mut dyn Read,
-    patch_file: Option<&Path>,
 ) -> io::Result<()> {
-    let patch = read_patch(input, patch_file)?;
-    if !attach_tty_for_tui()? {
+    let patch = read_patch(input)?;
+    if !attach_tty_input_for_tui()? {
         io::stdout().write_all(patch.as_bytes())?;
         return Ok(());
     }
@@ -113,31 +104,22 @@ pub fn run_pager(
 }
 
 fn managed_pager_command(binary: &Path) -> String {
-    format!(
-        "sh -c 'tmp=$(mktemp \"${{TMPDIR:-/tmp}}/divergent-git-pager.XXXXXX\") || exit 1; trap \"rm -f \\\"$tmp\\\"\" EXIT HUP INT TERM; cat > \"$tmp\"; if [ -r /dev/tty ] && [ -w /dev/tty ]; then exec \"$0\" git-pager --patch-file \"$tmp\" < /dev/tty > /dev/tty 2> /dev/tty; else exec \"$0\" git-pager --patch-file \"$tmp\"; fi' {}",
-        shell_quote(binary.as_os_str())
-    )
+    format!("{} pager", shell_quote_path(binary))
 }
 
-fn read_patch(input: &mut dyn Read, patch_file: Option<&Path>) -> io::Result<String> {
-    if let Some(path) = patch_file {
-        let patch = fs::read_to_string(path)?;
-        let _ = fs::remove_file(path);
-        Ok(patch)
-    } else {
-        let mut patch = String::new();
-        input.read_to_string(&mut patch)?;
-        Ok(patch)
-    }
+fn read_patch(input: &mut dyn Read) -> io::Result<String> {
+    let mut patch = String::new();
+    input.read_to_string(&mut patch)?;
+    Ok(patch)
 }
 
-fn shell_quote(value: &OsStr) -> String {
+fn shell_quote_path(value: &Path) -> String {
     let value = value.to_string_lossy();
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn is_managed(value: &str) -> bool {
-    value.contains("divergent") && value.contains("git-pager")
+    value.contains("divergent") && value.contains("pager")
 }
 
 fn read_pager_value(git_config_global: Option<&Path>) -> Result<Option<String>, DivergentError> {
@@ -168,17 +150,11 @@ fn print_env_warning() {
     }
 }
 
-fn env_pager_conflicts(git_pager: Option<&str>, pager: Option<&str>) -> Vec<String> {
+fn env_pager_conflicts(git_pager: Option<&str>, _pager: Option<&str>) -> Vec<String> {
     let mut conflicts = Vec::new();
     if let Some(value) = git_pager.filter(|value| is_conflicting_pager_value(value)) {
         conflicts.push(format!(
-            "GIT_PAGER='{}' can override Git pager config; unset it when using Divergent",
-            value
-        ));
-    }
-    if let Some(value) = pager.filter(|value| is_conflicting_pager_value(value)) {
-        conflicts.push(format!(
-            "PAGER='{}' can affect Git pager selection; unset it if git diff bypasses Divergent",
+            "GIT_PAGER='{}' has higher precedence than core.pager; unset it when using Divergent",
             value
         ));
     }
@@ -187,9 +163,7 @@ fn env_pager_conflicts(git_pager: Option<&str>, pager: Option<&str>) -> Vec<Stri
 
 fn is_conflicting_pager_value(value: &str) -> bool {
     let value = value.trim().to_ascii_lowercase();
-    !value.is_empty()
-        && !value.contains("divergent")
-        && (value == "cat" || value == "less" || value.contains("hunk") || value.contains("delta"))
+    !value.is_empty() && !value.contains("divergent")
 }
 
 fn write_pager_value(git_config_global: Option<&Path>, value: &str) -> Result<(), DivergentError> {
@@ -326,39 +300,36 @@ impl PatchFile {
 }
 
 #[cfg(unix)]
-fn attach_tty_for_tui() -> io::Result<bool> {
+fn attach_tty_input_for_tui() -> io::Result<bool> {
     use std::fs::OpenOptions;
     use std::os::fd::AsRawFd;
 
-    let Ok(tty) = OpenOptions::new().read(true).write(true).open("/dev/tty") else {
+    let Ok(tty) = OpenOptions::new().read(true).open("/dev/tty") else {
         return Ok(false);
     };
 
-    for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
-        if unsafe { libc::dup2(tty.as_raw_fd(), fd) } == -1 {
-            return Err(io::Error::last_os_error());
-        }
+    if unsafe { libc::dup2(tty.as_raw_fd(), libc::STDIN_FILENO) } == -1 {
+        return Err(io::Error::last_os_error());
     }
 
     Ok(true)
 }
 
 #[cfg(not(unix))]
-fn attach_tty_for_tui() -> io::Result<bool> {
+fn attach_tty_input_for_tui() -> io::Result<bool> {
     Ok(true)
 }
 
 #[cfg(unix)]
-fn tty_available() -> bool {
+fn controlling_tty_available() -> bool {
     std::fs::OpenOptions::new()
         .read(true)
-        .write(true)
         .open("/dev/tty")
         .is_ok()
 }
 
 #[cfg(not(unix))]
-fn tty_available() -> bool {
+fn controlling_tty_available() -> bool {
     true
 }
 
@@ -381,24 +352,29 @@ mod tests {
         let value = read_pager_value(Some(config.path())).unwrap().unwrap();
         assert!(is_managed(&value));
         assert!(value.contains("/tmp/divergent"));
+        assert!(value.ends_with(" pager"));
     }
 
     #[test]
-    fn managed_pager_command_uses_tty_tempfile_and_cleanup() {
+    fn managed_pager_command_is_plain_pager_command() {
         let command = managed_pager_command(Path::new("/tmp/divergent"));
-        assert!(command.contains("mktemp"));
-        assert!(command.contains("trap"));
-        assert!(command.contains("/dev/tty"));
-        assert!(command.contains("--patch-file"));
+        assert_eq!(command, "'/tmp/divergent' pager");
+        assert!(!command.contains("mktemp"));
+        assert!(!command.contains("trap"));
+        assert!(!command.contains("/dev/tty"));
+        assert!(!command.contains("--patch-file"));
     }
 
     #[test]
-    fn env_conflicts_detect_cat_hunk_and_delta() {
+    fn env_conflicts_detect_git_pager_override() {
         let conflicts = env_pager_conflicts(Some("cat"), Some("hunk pager"));
-        assert_eq!(conflicts.len(), 2);
+        assert_eq!(conflicts.len(), 1);
 
         let conflicts = env_pager_conflicts(Some("delta --color-only"), Some("divergent"));
         assert_eq!(conflicts.len(), 1);
+
+        let conflicts = env_pager_conflicts(None, Some("less"));
+        assert!(conflicts.is_empty());
     }
 
     #[test]

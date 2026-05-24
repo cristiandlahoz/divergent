@@ -141,11 +141,11 @@ pub fn render_sidebar(
         .collect();
 
     let title_style = if is_focused {
-        Style::default().fg(t.ui.border_focused)
+        Style::default().fg(t.ui.text_secondary)
     } else {
-        Style::default().fg(t.ui.border_unfocused)
+        Style::default().fg(t.ui.text_muted)
     };
-    let border_style = Style::default().fg(t.ui.border_unfocused);
+    let border_style = Style::default().fg(t.ui.border_tertiary);
 
     let visible_lines: Vec<Line> = lines
         .into_iter()

@@ -59,7 +59,7 @@ fn run() -> Result<(), DivergentError> {
         Commands::Git { command } => {
             command::git_integration::execute(command)?;
         }
-        Commands::GitPager { patch_file } => {
+        Commands::Pager => {
             let backend = selected_backend(cli.vcs)?;
             let theme = resolve_theme(None).map_err(DivergentError::InvalidInput)?;
             let options = command::diff::DiffOptions {
@@ -72,12 +72,7 @@ fn run() -> Result<(), DivergentError> {
                 theme,
             };
             let mut stdin = std::io::stdin();
-            command::git_integration::run_pager(
-                options,
-                backend.as_ref(),
-                &mut stdin,
-                patch_file.as_deref(),
-            )?;
+            command::git_integration::run_pager(options, backend.as_ref(), &mut stdin)?;
         }
     }
 

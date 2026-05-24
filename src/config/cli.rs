@@ -64,11 +64,8 @@ pub enum Commands {
         #[command(subcommand)]
         command: GitCommand,
     },
-    #[command(name = "git-pager", hide = true)]
-    GitPager {
-        #[arg(long)]
-        patch_file: Option<PathBuf>,
-    },
+    /// General Git pager wrapper.
+    Pager,
 }
 
 pub fn resolve_theme(cli_theme: Option<ThemeChoice>) -> Result<ThemeChoice, String> {
@@ -85,9 +82,9 @@ pub fn resolve_theme(cli_theme: Option<ThemeChoice>) -> Result<ThemeChoice, Stri
 
 #[derive(Subcommand)]
 pub enum GitCommand {
-    /// Configure global git diff to open Divergent.
+    /// Configure Git's global pager to open Divergent.
     Install {
-        /// Overwrite an existing non-Divergent pager.diff value.
+        /// Overwrite an existing non-Divergent core.pager value.
         #[arg(long)]
         force: bool,
 
@@ -95,11 +92,11 @@ pub enum GitCommand {
         #[arg(long)]
         binary: Option<PathBuf>,
     },
-    /// Remove the Divergent-managed global git diff integration.
+    /// Remove the Divergent-managed global Git pager integration.
     Uninstall,
-    /// Show whether global git diff is managed by Divergent.
+    /// Show whether Git's global pager is managed by Divergent.
     Status,
-    /// Explain whether Git will actually route diffs through Divergent.
+    /// Explain whether Git will actually route pager output through Divergent.
     Doctor,
 }
 
@@ -134,6 +131,12 @@ mod tests {
                 }
             }
         ));
+    }
+
+    #[test]
+    fn test_pager_parses() {
+        let cli = Cli::try_parse_from(["divergent", "pager"]).unwrap();
+        assert!(matches!(cli.command, Commands::Pager));
     }
 
     #[test]

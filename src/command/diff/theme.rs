@@ -131,6 +131,7 @@ pub struct DiffColors {
 pub struct UiColors {
     pub border_focused: Color,
     pub border_unfocused: Color,
+    pub border_tertiary: Color,
     pub text_primary: Color,
     pub text_secondary: Color,
     pub text_muted: Color,
@@ -146,6 +147,9 @@ pub struct UiColors {
     pub selection_bg: Color,
     pub selection_fg: Color,
     pub highlight: Color,
+    pub focused_hunk_bg: Color,
+    pub focused_hunk_gutter_bg: Color,
+    pub focused_hunk_fg: Color,
     pub viewed: Color,
     pub watching: Color,
     pub search_match_bg: Color,
@@ -208,6 +212,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Cyan,
                 border_unfocused: Color::DarkGray,
+                border_tertiary: Color::Rgb(35, 35, 45),
                 text_primary: Color::Rgb(230, 230, 230),
                 text_secondary: Color::Rgb(200, 200, 200),
                 text_muted: Color::Rgb(140, 140, 160),
@@ -223,6 +228,9 @@ impl Theme {
                 selection_bg: Color::Cyan,
                 selection_fg: Color::Black,
                 highlight: Color::Yellow,
+                focused_hunk_bg: Color::Rgb(70, 56, 24),
+                focused_hunk_gutter_bg: Color::Rgb(96, 75, 26),
+                focused_hunk_fg: Color::Rgb(255, 203, 107),
                 viewed: Color::Green,
                 watching: Color::Yellow,
                 search_match_bg: Color::Rgb(100, 80, 20),
@@ -269,6 +277,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(9, 105, 218),
                 border_unfocused: Color::Rgb(208, 215, 222),
+                border_tertiary: Color::Rgb(225, 230, 235),
                 text_primary: Color::Rgb(36, 41, 47),
                 text_secondary: Color::Rgb(87, 96, 106),
                 text_muted: Color::Rgb(140, 149, 159),
@@ -284,6 +293,9 @@ impl Theme {
                 selection_bg: Color::Rgb(9, 105, 218),
                 selection_fg: Color::White,
                 highlight: Color::Rgb(154, 103, 0),
+                focused_hunk_bg: Color::Rgb(255, 247, 214),
+                focused_hunk_gutter_bg: Color::Rgb(248, 224, 150),
+                focused_hunk_fg: Color::Rgb(154, 103, 0),
                 viewed: Color::Rgb(26, 127, 55),
                 watching: Color::Rgb(154, 103, 0),
                 search_match_bg: Color::Rgb(255, 235, 150),
@@ -330,6 +342,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(40, 66, 100),
                 border_unfocused: Color::Rgb(53, 85, 120),
+                border_tertiary: Color::Rgb(20, 35, 56),
                 text_primary: Color::Rgb(238, 244, 255),
                 text_secondary: Color::Rgb(141, 165, 199),
                 text_muted: Color::Rgb(86, 115, 154),
@@ -345,6 +358,9 @@ impl Theme {
                 selection_bg: Color::Rgb(42, 106, 138),
                 selection_fg: Color::Rgb(238, 244, 255),
                 highlight: Color::Rgb(127, 209, 255),
+                focused_hunk_bg: Color::Rgb(53, 43, 24),
+                focused_hunk_gutter_bg: Color::Rgb(79, 62, 27),
+                focused_hunk_fg: Color::Rgb(255, 203, 87),
                 viewed: Color::Rgb(90, 209, 136),
                 watching: Color::Rgb(255, 216, 131),
                 search_match_bg: Color::Rgb(53, 85, 120),
@@ -391,6 +407,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(122, 162, 247),
                 border_unfocused: Color::Rgb(65, 72, 104),
+                border_tertiary: Color::Rgb(38, 43, 67),
                 text_primary: Color::Rgb(192, 202, 245),
                 text_secondary: Color::Rgb(169, 177, 214),
                 text_muted: Color::Rgb(86, 95, 137),
@@ -406,6 +423,9 @@ impl Theme {
                 selection_bg: Color::Rgb(122, 162, 247),
                 selection_fg: Color::Rgb(26, 27, 38),
                 highlight: Color::Rgb(224, 175, 104),
+                focused_hunk_bg: Color::Rgb(54, 47, 34),
+                focused_hunk_gutter_bg: Color::Rgb(82, 67, 38),
+                focused_hunk_fg: Color::Rgb(224, 175, 104),
                 viewed: Color::Rgb(158, 206, 106),
                 watching: Color::Rgb(224, 175, 104),
                 search_match_bg: Color::Rgb(224, 175, 104),
@@ -479,23 +499,27 @@ impl Theme {
                 deleted_word_bg: Color::Rgb(100, 50, 60),
             },
             ui: UiColors {
-                border_focused: Color::Rgb(137, 180, 250),   // blue
-                border_unfocused: Color::Rgb(69, 71, 90),    // surface1
-                text_primary: Color::Rgb(205, 214, 244),     // text
-                text_secondary: Color::Rgb(166, 173, 200),   // subtext0
-                text_muted: Color::Rgb(108, 112, 134),       // overlay0
-                line_number: Color::Rgb(88, 91, 112),        // overlay0
-                bg: Color::Rgb(24, 24, 37),                  // mantle
-                footer_branch_bg: Color::Rgb(49, 50, 68),    // surface0
+                border_focused: Color::Rgb(137, 180, 250), // blue
+                border_unfocused: Color::Rgb(69, 71, 90),  // surface1
+                border_tertiary: Color::Rgb(45, 47, 66),
+                text_primary: Color::Rgb(205, 214, 244), // text
+                text_secondary: Color::Rgb(166, 173, 200), // subtext0
+                text_muted: Color::Rgb(108, 112, 134),   // overlay0
+                line_number: Color::Rgb(88, 91, 112),    // overlay0
+                bg: Color::Rgb(24, 24, 37),              // mantle
+                footer_branch_bg: Color::Rgb(49, 50, 68), // surface0
                 footer_branch_fg: Color::Rgb(137, 180, 250), // blue
-                status_added: Color::Rgb(166, 227, 161),     // green
-                status_modified: Color::Rgb(249, 226, 175),  // yellow
-                status_deleted: Color::Rgb(243, 139, 168),   // red
+                status_added: Color::Rgb(166, 227, 161), // green
+                status_modified: Color::Rgb(249, 226, 175), // yellow
+                status_deleted: Color::Rgb(243, 139, 168), // red
                 stats_added: Color::Rgb(166, 227, 161),
                 stats_removed: Color::Rgb(243, 139, 168),
                 selection_bg: Color::Rgb(137, 180, 250),
                 selection_fg: Color::Rgb(30, 30, 46),
                 highlight: Color::Rgb(249, 226, 175),
+                focused_hunk_bg: Color::Rgb(65, 55, 36),
+                focused_hunk_gutter_bg: Color::Rgb(88, 73, 40),
+                focused_hunk_fg: Color::Rgb(249, 226, 175),
                 viewed: Color::Rgb(166, 227, 161),
                 watching: Color::Rgb(249, 226, 175),
                 search_match_bg: Color::Rgb(249, 226, 175),
@@ -542,6 +566,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(30, 102, 245),
                 border_unfocused: Color::Rgb(188, 192, 204),
+                border_tertiary: Color::Rgb(215, 218, 226),
                 text_primary: Color::Rgb(76, 79, 105),
                 text_secondary: Color::Rgb(92, 95, 119),
                 text_muted: Color::Rgb(140, 143, 161),
@@ -557,6 +582,9 @@ impl Theme {
                 selection_bg: Color::Rgb(30, 102, 245),
                 selection_fg: Color::White,
                 highlight: Color::Rgb(223, 142, 29),
+                focused_hunk_bg: Color::Rgb(255, 241, 210),
+                focused_hunk_gutter_bg: Color::Rgb(245, 214, 156),
+                focused_hunk_fg: Color::Rgb(223, 142, 29),
                 viewed: Color::Rgb(64, 160, 43),
                 watching: Color::Rgb(223, 142, 29),
                 search_match_bg: Color::Rgb(223, 142, 29),
@@ -603,6 +631,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(189, 147, 249), // purple
                 border_unfocused: Color::Rgb(68, 71, 90),
+                border_tertiary: Color::Rgb(48, 50, 64),
                 text_primary: Color::Rgb(248, 248, 242),
                 text_secondary: Color::Rgb(189, 147, 249),
                 text_muted: Color::Rgb(98, 114, 164),
@@ -618,6 +647,9 @@ impl Theme {
                 selection_bg: Color::Rgb(189, 147, 249),
                 selection_fg: Color::Rgb(40, 42, 54),
                 highlight: Color::Rgb(241, 250, 140),
+                focused_hunk_bg: Color::Rgb(70, 66, 36),
+                focused_hunk_gutter_bg: Color::Rgb(96, 87, 40),
+                focused_hunk_fg: Color::Rgb(241, 250, 140),
                 viewed: Color::Rgb(80, 250, 123),
                 watching: Color::Rgb(255, 184, 108),
                 search_match_bg: Color::Rgb(241, 250, 140),
@@ -664,9 +696,10 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(136, 192, 208), // nord8
                 border_unfocused: Color::Rgb(59, 66, 82),  // nord1
-                text_primary: Color::Rgb(236, 239, 244),   // nord6
+                border_tertiary: Color::Rgb(49, 56, 70),
+                text_primary: Color::Rgb(236, 239, 244), // nord6
                 text_secondary: Color::Rgb(216, 222, 233), // nord4
-                text_muted: Color::Rgb(76, 86, 106),       // nord3
+                text_muted: Color::Rgb(76, 86, 106),     // nord3
                 line_number: Color::Rgb(76, 86, 106),
                 bg: Color::Rgb(59, 66, 82),               // nord1
                 footer_branch_bg: Color::Rgb(67, 76, 94), // nord2
@@ -679,6 +712,9 @@ impl Theme {
                 selection_bg: Color::Rgb(136, 192, 208),
                 selection_fg: Color::Rgb(46, 52, 64),
                 highlight: Color::Rgb(235, 203, 139),
+                focused_hunk_bg: Color::Rgb(73, 65, 43),
+                focused_hunk_gutter_bg: Color::Rgb(96, 82, 48),
+                focused_hunk_fg: Color::Rgb(235, 203, 139),
                 viewed: Color::Rgb(163, 190, 140),
                 watching: Color::Rgb(235, 203, 139),
                 search_match_bg: Color::Rgb(235, 203, 139),
@@ -725,6 +761,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(250, 189, 47), // yellow
                 border_unfocused: Color::Rgb(80, 73, 69), // bg2
+                border_tertiary: Color::Rgb(64, 58, 54),
                 text_primary: Color::Rgb(235, 219, 178),
                 text_secondary: Color::Rgb(213, 196, 161),
                 text_muted: Color::Rgb(146, 131, 116),
@@ -740,6 +777,9 @@ impl Theme {
                 selection_bg: Color::Rgb(250, 189, 47),
                 selection_fg: Color::Rgb(40, 40, 40),
                 highlight: Color::Rgb(250, 189, 47),
+                focused_hunk_bg: Color::Rgb(78, 62, 35),
+                focused_hunk_gutter_bg: Color::Rgb(108, 79, 35),
+                focused_hunk_fg: Color::Rgb(250, 189, 47),
                 viewed: Color::Rgb(184, 187, 38),
                 watching: Color::Rgb(250, 189, 47),
                 search_match_bg: Color::Rgb(250, 189, 47),
@@ -786,6 +826,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(69, 133, 136), // blue
                 border_unfocused: Color::Rgb(213, 196, 161),
+                border_tertiary: Color::Rgb(225, 211, 178),
                 text_primary: Color::Rgb(60, 56, 54),
                 text_secondary: Color::Rgb(80, 73, 69),
                 text_muted: Color::Rgb(146, 131, 116),
@@ -801,6 +842,9 @@ impl Theme {
                 selection_bg: Color::Rgb(69, 133, 136),
                 selection_fg: Color::White,
                 highlight: Color::Rgb(215, 153, 33),
+                focused_hunk_bg: Color::Rgb(255, 238, 190),
+                focused_hunk_gutter_bg: Color::Rgb(235, 202, 129),
+                focused_hunk_fg: Color::Rgb(215, 153, 33),
                 viewed: Color::Rgb(152, 151, 26),
                 watching: Color::Rgb(215, 153, 33),
                 search_match_bg: Color::Rgb(215, 153, 33),
@@ -847,6 +891,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(97, 175, 239), // blue
                 border_unfocused: Color::Rgb(62, 68, 81),
+                border_tertiary: Color::Rgb(45, 50, 61),
                 text_primary: Color::Rgb(171, 178, 191),
                 text_secondary: Color::Rgb(152, 159, 172),
                 text_muted: Color::Rgb(92, 99, 112),
@@ -862,6 +907,9 @@ impl Theme {
                 selection_bg: Color::Rgb(97, 175, 239),
                 selection_fg: Color::Rgb(40, 44, 52),
                 highlight: Color::Rgb(229, 192, 123),
+                focused_hunk_bg: Color::Rgb(67, 55, 35),
+                focused_hunk_gutter_bg: Color::Rgb(91, 72, 39),
+                focused_hunk_fg: Color::Rgb(229, 192, 123),
                 viewed: Color::Rgb(152, 195, 121),
                 watching: Color::Rgb(229, 192, 123),
                 search_match_bg: Color::Rgb(229, 192, 123),
@@ -908,6 +956,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(38, 139, 210), // blue
                 border_unfocused: Color::Rgb(88, 110, 117),
+                border_tertiary: Color::Rgb(32, 79, 91),
                 text_primary: Color::Rgb(131, 148, 150), // base0
                 text_secondary: Color::Rgb(147, 161, 161), // base1
                 text_muted: Color::Rgb(88, 110, 117),    // base01
@@ -923,6 +972,9 @@ impl Theme {
                 selection_bg: Color::Rgb(38, 139, 210),
                 selection_fg: Color::Rgb(0, 43, 54),
                 highlight: Color::Rgb(181, 137, 0),
+                focused_hunk_bg: Color::Rgb(62, 53, 25),
+                focused_hunk_gutter_bg: Color::Rgb(88, 70, 25),
+                focused_hunk_fg: Color::Rgb(181, 137, 0),
                 viewed: Color::Rgb(133, 153, 0),
                 watching: Color::Rgb(181, 137, 0),
                 search_match_bg: Color::Rgb(181, 137, 0),
@@ -969,6 +1021,7 @@ impl Theme {
             ui: UiColors {
                 border_focused: Color::Rgb(38, 139, 210),
                 border_unfocused: Color::Rgb(147, 161, 161),
+                border_tertiary: Color::Rgb(220, 213, 192),
                 text_primary: Color::Rgb(101, 123, 131), // base00
                 text_secondary: Color::Rgb(88, 110, 117), // base01
                 text_muted: Color::Rgb(147, 161, 161),   // base1
@@ -984,6 +1037,9 @@ impl Theme {
                 selection_bg: Color::Rgb(38, 139, 210),
                 selection_fg: Color::White,
                 highlight: Color::Rgb(181, 137, 0),
+                focused_hunk_bg: Color::Rgb(255, 241, 198),
+                focused_hunk_gutter_bg: Color::Rgb(235, 206, 122),
+                focused_hunk_fg: Color::Rgb(181, 137, 0),
                 viewed: Color::Rgb(133, 153, 0),
                 watching: Color::Rgb(181, 137, 0),
                 search_match_bg: Color::Rgb(181, 137, 0),

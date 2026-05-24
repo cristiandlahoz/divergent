@@ -494,6 +494,23 @@ fn apply_word_emphasis_highlight<'a>(
 const SELECTION_TINT: Color = Color::Rgb(80, 120, 180);
 const SELECTION_ALPHA: f32 = 0.4;
 
+fn blend_rgb_channel(base: u8, overlay: u8, overlay_parts: u16) -> u8 {
+    let base_parts = 100u16.saturating_sub(overlay_parts);
+    ((base as u16 * base_parts + overlay as u16 * overlay_parts) / 100) as u8
+}
+
+fn blend_color(base: Color, overlay: Color, overlay_parts: u16) -> Color {
+    match (base, overlay) {
+        (Color::Rgb(br, bg, bb), Color::Rgb(or, og, ob)) => Color::Rgb(
+            blend_rgb_channel(br, or, overlay_parts),
+            blend_rgb_channel(bg, og, overlay_parts),
+            blend_rgb_channel(bb, ob, overlay_parts),
+        ),
+        (Color::Reset, overlay) => overlay,
+        (base, _) => base,
+    }
+}
+
 /// Blend a base background color with a selection tint.
 #[inline]
 fn blend_with_selection(base: Color) -> Color {
@@ -693,16 +710,36 @@ impl DiffLineStyle {
             },
         }
     }
+
+    fn focus_hunk(&mut self, t: &crate::command::diff::theme::Theme) {
+        for bg in [&mut self.old_bg, &mut self.new_bg].into_iter().flatten() {
+            *bg = blend_color(*bg, t.ui.focused_hunk_bg, 30);
+        }
+        for bg in [&mut self.old_gutter_bg, &mut self.new_gutter_bg]
+            .into_iter()
+            .flatten()
+        {
+            *bg = blend_color(*bg, t.ui.focused_hunk_gutter_bg, 45);
+        }
+    }
 }
 
 pub fn render_empty_state(frame: &mut Frame, watching: bool) {
+    let t = theme::get();
     let watch_hint = if watching {
         " (watching for changes...)"
     } else {
         ""
     };
-    let msg = Paragraph::new(format!("No changes detected.{}", watch_hint))
-        .block(Block::default().title(" Git Review ").borders(Borders::ALL));
+    let msg = Paragraph::new(format!("No changes detected.{}", watch_hint)).block(
+        Block::default()
+            .title(Line::styled(
+                " Git Review ",
+                Style::default().fg(t.ui.text_secondary),
+            ))
+            .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
+            .border_style(Style::default().fg(t.ui.border_tertiary)),
+    );
     frame.render_widget(msg, frame.area());
 }
 
@@ -795,6 +832,24 @@ fn is_in_ann_range(
     ranges.iter().any(|(first, last, ann_panel)| {
         sbs_idx >= *first && sbs_idx <= *last && panel.is_none_or(|p| *ann_panel == p)
     })
+}
+
+fn is_in_focused_hunk(
+    line_idx: usize,
+    change_type: ChangeType,
+    focused_hunk: Option<usize>,
+    hunks: &[usize],
+) -> bool {
+    if matches!(change_type, ChangeType::Equal) {
+        return false;
+    }
+    if let Some(hunk_idx) = focused_hunk {
+        if let Some(&hunk_start) = hunks.get(hunk_idx) {
+            let hunk_end = hunks.get(hunk_idx + 1).copied().unwrap_or(usize::MAX);
+            return line_idx >= hunk_start && line_idx < hunk_end;
+        }
+    }
+    false
 }
 
 /// Build the focus/annotation indicator span for a diff line.
@@ -981,11 +1036,11 @@ fn render_stack_diff(
 ) -> (usize, Vec<(usize, usize)>) {
     let t = theme::get();
     let bg = t.ui.bg;
-    let border_style = Style::default().fg(t.ui.border_unfocused);
+    let border_style = Style::default().fg(t.ui.border_tertiary);
     let title_style = if ctx.focused_panel == FocusedPanel::DiffView {
-        Style::default().fg(t.ui.border_focused)
+        Style::default().fg(t.ui.text_secondary)
     } else {
-        Style::default().fg(t.ui.border_unfocused)
+        Style::default().fg(t.ui.text_muted)
     };
 
     let context_lines = compute_context_lines(
@@ -1040,7 +1095,7 @@ fn render_stack_diff(
     }
 
     let ann_index_ranges = compute_ann_index_ranges(&line_annotations, ctx.side_by_side);
-    let focus_style = Style::default().fg(t.ui.border_focused);
+    let focus_style = Style::default().fg(t.ui.focused_hunk_fg);
     let annotation_indicator_style = Style::default().fg(t.ui.highlight);
 
     let is_in_focused_hunk = |line_idx: usize, change_type: ChangeType| -> bool {
@@ -1058,8 +1113,11 @@ fn render_stack_diff(
 
     for (row_idx, row) in rows.iter().enumerate() {
         let diff_line = &ctx.side_by_side[row.line_idx];
-        let style = DiffLineStyle::for_change_type(diff_line.change_type, bg, t);
+        let mut style = DiffLineStyle::for_change_type(diff_line.change_type, bg, t);
         let in_focused = is_in_focused_hunk(row.line_idx, diff_line.change_type);
+        if in_focused {
+            style.focus_hunk(t);
+        }
         let in_annotation = is_in_ann_range(row.line_idx, Some(row.panel), &ann_index_ranges);
         let selection_range = get_selection_range_for_line(row.line_idx, row.panel, ctx.selection);
         let line_selected = selection_range.is_some_and(|(s, e)| s == 0 && e == usize::MAX);
@@ -1210,7 +1268,7 @@ fn render_stack_diff(
         .block(
             Block::default()
                 .title(Line::styled(" [2] Stack ", title_style))
-                .borders(Borders::ALL)
+                .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
                 .border_style(border_style),
         );
     frame.render_widget(para, main_area);
@@ -1339,11 +1397,11 @@ pub fn render_diff(
 
     // Handle binary files - show a message instead of trying to diff
     if diff.is_binary {
-        let border_style = Style::default().fg(t.ui.border_unfocused);
+        let border_style = Style::default().fg(t.ui.border_tertiary);
         let title_style = if focused_panel == FocusedPanel::DiffView {
-            Style::default().fg(t.ui.border_focused)
+            Style::default().fg(t.ui.text_secondary)
         } else {
-            Style::default().fg(t.ui.border_unfocused)
+            Style::default().fg(t.ui.text_muted)
         };
 
         let message = Line::from(vec![Span::styled(
@@ -1393,11 +1451,11 @@ pub fn render_diff(
     // Track inline annotation overlay gaps for mouse coordinate mapping
     let mut overlay_gaps: Vec<(usize, usize)> = Vec::new();
 
-    let border_style = Style::default().fg(t.ui.border_unfocused);
+    let border_style = Style::default().fg(t.ui.border_tertiary);
     let title_style = if focused_panel == FocusedPanel::DiffView {
-        Style::default().fg(t.ui.border_focused)
+        Style::default().fg(t.ui.text_secondary)
     } else {
-        Style::default().fg(t.ui.border_unfocused)
+        Style::default().fg(t.ui.text_muted)
     };
 
     if is_new_file {
@@ -1466,7 +1524,7 @@ pub fn render_diff(
 
         let ann_index_ranges = compute_ann_index_ranges(&line_annotations, side_by_side);
         let annotation_indicator_style = Style::default().fg(t.ui.highlight);
-        let focus_style = Style::default().fg(t.ui.border_focused);
+        let focus_style = Style::default().fg(t.ui.focused_hunk_fg);
 
         for (i, diff_line) in visible_lines.iter().enumerate() {
             let line_idx = scroll_usize + i;
@@ -1475,11 +1533,17 @@ pub fn render_diff(
             let in_annotation = is_in_ann_range(line_idx, None, &ann_index_ranges);
             let new_line_selected =
                 new_selection_range.is_some_and(|(s, e)| s == 0 && e == usize::MAX);
+            let in_focused =
+                is_in_focused_hunk(line_idx, diff_line.change_type, focused_hunk, hunks);
+            let mut style = DiffLineStyle::for_change_type(diff_line.change_type, bg, t);
+            if in_focused {
+                style.focus_hunk(t);
+            }
 
             if let Some((num, text)) = &diff_line.new_line {
                 let mut spans: Vec<Span> = Vec::new();
                 spans.push(make_indicator_span(
-                    false,
+                    in_focused,
                     in_annotation,
                     new_line_selected,
                     bg,
@@ -1488,7 +1552,8 @@ pub fn render_diff(
                 ));
 
                 let prefix = format!("{:4} ", num);
-                let gutter_bg = t.diff.added_gutter_bg;
+                let line_bg = style.new_bg.unwrap_or(t.diff.added_bg);
+                let gutter_bg = style.new_gutter_bg.unwrap_or(t.diff.added_gutter_bg);
                 let gutter_bg = if new_line_selected {
                     blend_with_selection(gutter_bg)
                 } else {
@@ -1496,24 +1561,26 @@ pub fn render_diff(
                 };
                 spans.push(Span::styled(
                     prefix,
-                    Style::default().fg(t.diff.added_gutter_fg).bg(gutter_bg),
+                    Style::default()
+                        .fg(style.new_gutter_fg.unwrap_or(t.diff.added_gutter_fg))
+                        .bg(gutter_bg),
                 ));
                 let matches = search_state.get_matches_for_line(line_idx, MatchPanel::New);
                 let content_spans = apply_search_highlight(
                     text,
                     &diff.filename,
-                    Some(t.diff.added_bg),
+                    Some(line_bg),
                     &matches,
                     Some(new_highlighter),
                     Some(*num),
                     settings.tab_width,
                 );
                 let content_spans =
-                    apply_selection_to_spans(content_spans, new_selection_range, t.diff.added_bg);
+                    apply_selection_to_spans(content_spans, new_selection_range, line_bg);
                 spans.extend(content_spans);
                 new_lines.push(line_with_trailing_bg(
                     spans,
-                    t.diff.added_bg,
+                    line_bg,
                     content_width(Some(main_area)),
                 ));
             }
@@ -1540,7 +1607,7 @@ pub fn render_diff(
         let new_para = Paragraph::new(new_lines).scroll((0, h_scroll)).block(
             Block::default()
                 .title(Line::styled(" [2] New File ", title_style))
-                .borders(Borders::ALL)
+                .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
                 .border_style(border_style),
         );
         frame.render_widget(new_para, main_area);
@@ -1628,7 +1695,7 @@ pub fn render_diff(
 
         let ann_index_ranges = compute_ann_index_ranges(&line_annotations, side_by_side);
         let annotation_indicator_style = Style::default().fg(t.ui.highlight);
-        let focus_style = Style::default().fg(t.ui.border_focused);
+        let focus_style = Style::default().fg(t.ui.focused_hunk_fg);
 
         for (i, diff_line) in visible_lines.iter().enumerate() {
             let line_idx = scroll_usize + i;
@@ -1637,11 +1704,17 @@ pub fn render_diff(
             let in_annotation = is_in_ann_range(line_idx, None, &ann_index_ranges);
             let old_line_selected =
                 old_selection_range.is_some_and(|(s, e)| s == 0 && e == usize::MAX);
+            let in_focused =
+                is_in_focused_hunk(line_idx, diff_line.change_type, focused_hunk, hunks);
+            let mut style = DiffLineStyle::for_change_type(diff_line.change_type, bg, t);
+            if in_focused {
+                style.focus_hunk(t);
+            }
 
             if let Some((num, text)) = &diff_line.old_line {
                 let mut spans: Vec<Span> = Vec::new();
                 spans.push(make_indicator_span(
-                    false,
+                    in_focused,
                     in_annotation,
                     old_line_selected,
                     bg,
@@ -1650,7 +1723,8 @@ pub fn render_diff(
                 ));
 
                 let prefix = format!("{:4} ", num);
-                let gutter_bg = t.diff.deleted_gutter_bg;
+                let line_bg = style.old_bg.unwrap_or(t.diff.deleted_bg);
+                let gutter_bg = style.old_gutter_bg.unwrap_or(t.diff.deleted_gutter_bg);
                 let gutter_bg = if old_line_selected {
                     blend_with_selection(gutter_bg)
                 } else {
@@ -1658,24 +1732,26 @@ pub fn render_diff(
                 };
                 spans.push(Span::styled(
                     prefix,
-                    Style::default().fg(t.diff.deleted_gutter_fg).bg(gutter_bg),
+                    Style::default()
+                        .fg(style.old_gutter_fg.unwrap_or(t.diff.deleted_gutter_fg))
+                        .bg(gutter_bg),
                 ));
                 let matches = search_state.get_matches_for_line(line_idx, MatchPanel::Old);
                 let content_spans = apply_search_highlight(
                     text,
                     &diff.filename,
-                    Some(t.diff.deleted_bg),
+                    Some(line_bg),
                     &matches,
                     Some(old_highlighter),
                     Some(*num),
                     settings.tab_width,
                 );
                 let content_spans =
-                    apply_selection_to_spans(content_spans, old_selection_range, t.diff.deleted_bg);
+                    apply_selection_to_spans(content_spans, old_selection_range, line_bg);
                 spans.extend(content_spans);
                 old_lines.push(line_with_trailing_bg(
                     spans,
-                    t.diff.deleted_bg,
+                    line_bg,
                     content_width(Some(main_area)),
                 ));
             }
@@ -1702,7 +1778,7 @@ pub fn render_diff(
         let old_para = Paragraph::new(old_lines).scroll((0, h_scroll)).block(
             Block::default()
                 .title(Line::styled(" [2] Deleted File ", title_style))
-                .borders(Borders::ALL)
+                .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
                 .border_style(border_style),
         );
         frame.render_widget(old_para, main_area);
@@ -1866,13 +1942,16 @@ pub fn render_diff(
         let mut border_marker_rows: Vec<usize> = Vec::new();
         let mut rendered_row = content_row_offset;
 
-        let focus_style = Style::default().fg(t.ui.border_focused);
+        let focus_style = Style::default().fg(t.ui.focused_hunk_fg);
         let annotation_indicator_style = Style::default().fg(t.ui.highlight);
 
         for (i, diff_line) in visible_lines.iter().enumerate() {
             let line_idx = scroll_usize + i;
             let in_focused = is_in_focused_hunk(line_idx, diff_line.change_type);
-            let style = DiffLineStyle::for_change_type(diff_line.change_type, bg, t);
+            let mut style = DiffLineStyle::for_change_type(diff_line.change_type, bg, t);
+            if in_focused {
+                style.focus_hunk(t);
+            }
 
             let old_selection_range =
                 get_selection_range_for_line(line_idx, DiffPanelFocus::Old, selection);
@@ -2139,7 +2218,7 @@ pub fn render_diff(
                 .block(
                     Block::default()
                         .title(Line::styled(" [2] Old ", title_style))
-                        .borders(Borders::ALL)
+                        .borders(Borders::TOP | Borders::BOTTOM | Borders::RIGHT)
                         .border_style(border_style),
                 );
             frame.render_widget(old_para, area);
