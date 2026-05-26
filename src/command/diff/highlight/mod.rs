@@ -236,6 +236,7 @@ mod tests {
         assert!(extensions.contains(&"yml"), "YML config should be loaded");
         assert!(extensions.contains(&"xml"), "XML config should be loaded");
         assert!(extensions.contains(&"svg"), "SVG config should be loaded");
+        assert!(extensions.contains(&"sql"), "SQL config should be loaded");
     }
 
     #[test]
@@ -257,6 +258,8 @@ mod tests {
             ("UPPER.YAML", "yaml"),
             (".zshrc", "bash"),
             ("Gemfile", "ruby"),
+            ("schema.sql", "postgres"),
+            ("schema.PSQL", "postgres"),
         ];
 
         for (filename, expected) in cases {
@@ -614,5 +617,16 @@ spring:
             !highlighter.is_empty(),
             "Uppercase YAML extension should load"
         );
+    }
+
+    #[test]
+    fn test_postgres_highlighting() {
+        let code = r#"-- comment
+SELECT id, name FROM users WHERE id = 42;
+"#;
+        let result = highlight_code(code, "schema.sql");
+        assert!(!result.is_empty(), "Postgres highlighting should produce output");
+        let has_highlights = result.iter().any(|(_, h)| h.is_some());
+        assert!(has_highlights, "SQL should have syntax highlights");
     }
 }

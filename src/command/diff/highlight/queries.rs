@@ -1200,3 +1200,372 @@ pub const ZIG_HIGHLIGHTS: &str = r#"
 ; Comments
 (comment) @comment
 "#;
+
+/*
+Portions of `POSTGRES_HIGHLIGHTS` are adapted from tree-sitter-postgres
+`postgres/queries/highlights.scm` and remapped to Divergent's supported
+capture names.
+
+Upstream project: https://github.com/gmr/tree-sitter-postgres
+
+BSD 3-Clause License
+
+Copyright (c) 2023, PostgreSQL Global Development Group
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+pub const POSTGRES_HIGHLIGHTS: &str = r#"
+; Comments
+(comment) @comment
+
+; Literals
+(integer_literal) @number
+(float_literal) @number
+(string_literal) @string
+(bit_string_literal) @string
+(hex_string_literal) @string
+
+(kw_true) @constant.builtin
+(kw_false) @constant.builtin
+(kw_null) @constant.builtin
+
+(param) @variable.parameter
+
+; Identifiers
+(identifier) @variable
+
+(columnref
+  (ColId) @variable)
+
+; Types
+[
+  (Numeric)
+  (Bit)
+  (ConstBit)
+  (Character)
+  (ConstCharacter)
+  (ConstDatetime)
+  (ConstInterval)
+  (JsonType)
+] @type.builtin
+
+(Typename
+  (SimpleTypename
+    (GenericType
+      (type_function_name
+        (identifier) @type) .)))
+
+(Typename
+  (SimpleTypename
+    (GenericType
+      (type_function_name
+        (identifier) @type)
+      (opt_type_modifiers))))
+
+(Typename
+  (SimpleTypename
+    (GenericType
+      (attrs
+        (attr_name
+          (ColLabel
+            (identifier) @type))))))
+
+(DefineStmt
+  (kw_create)
+  (kw_type)
+  (any_name
+    (attrs
+      (attr_name
+        (ColLabel
+          (identifier) @type)))))
+
+(DefineStmt
+  (kw_create)
+  (kw_type)
+  (any_name
+    (ColId
+      (identifier) @type) .))
+
+; Functions
+(func_application
+  (func_name) @function)
+
+(func_expr_common_subexpr) @function
+
+; Operators
+(operator) @operator
+
+[
+  "+"
+  "-"
+  "*"
+  "/"
+  "%"
+  "^"
+  "<"
+  ">"
+  "="
+] @operator
+
+; Punctuation
+["(" ")"] @punctuation.bracket
+["[" "]"] @punctuation.bracket
+"," @punctuation.delimiter
+"." @punctuation.delimiter
+";" @punctuation.delimiter
+
+; Statement keywords
+[
+  (kw_select)
+  (kw_from)
+  (kw_where)
+  (kw_insert)
+  (kw_into)
+  (kw_update)
+  (kw_delete)
+  (kw_create)
+  (kw_alter)
+  (kw_drop)
+  (kw_table)
+  (kw_index)
+  (kw_view)
+  (kw_with)
+  (kw_as)
+  (kw_set)
+  (kw_values)
+  (kw_returning)
+  (kw_explain)
+  (kw_analyze)
+  (kw_vacuum)
+  (kw_truncate)
+  (kw_copy)
+  (kw_grant)
+  (kw_revoke)
+] @keyword
+
+; Clause keywords
+[
+  (kw_distinct)
+  (kw_all)
+  (kw_group)
+  (kw_order)
+  (kw_by)
+  (kw_having)
+  (kw_limit)
+  (kw_offset)
+  (kw_fetch)
+  (kw_for)
+  (kw_on)
+  (kw_using)
+  (kw_asc)
+  (kw_desc)
+  (kw_nulls)
+  (kw_first)
+  (kw_last)
+  (kw_only)
+  (kw_recursive)
+  (kw_cascade)
+  (kw_restrict)
+  (kw_if)
+  (kw_exists)
+] @keyword
+
+; Join keywords
+[
+  (kw_join)
+  (kw_inner)
+  (kw_left)
+  (kw_right)
+  (kw_full)
+  (kw_cross)
+  (kw_natural)
+  (kw_lateral)
+] @keyword
+
+; Logical / boolean keywords
+[
+  (kw_and)
+  (kw_or)
+  (kw_not)
+  (kw_in)
+  (kw_between)
+  (kw_like)
+  (kw_ilike)
+  (kw_similar)
+  (kw_is)
+  (kw_isnull)
+  (kw_notnull)
+  (kw_escape)
+] @keyword
+
+; Set operation keywords
+[
+  (kw_union)
+  (kw_intersect)
+  (kw_except)
+] @keyword
+
+; Conditional keywords
+[
+  (kw_case)
+  (kw_when)
+  (kw_then)
+  (kw_else)
+  (kw_end)
+] @keyword
+
+; Transaction keywords
+[
+  (kw_begin)
+  (kw_commit)
+  (kw_rollback)
+  (kw_savepoint)
+  (kw_release)
+  (kw_abort)
+  (kw_start)
+] @keyword
+
+; Type keywords
+[
+  (kw_int)
+  (kw_integer)
+  (kw_smallint)
+  (kw_bigint)
+  (kw_decimal)
+  (kw_numeric)
+  (kw_float)
+  (kw_real)
+  (kw_double)
+  (kw_char)
+  (kw_character)
+  (kw_varchar)
+  (kw_text)
+  (kw_boolean)
+  (kw_bit)
+  (kw_time)
+  (kw_timestamp)
+  (kw_interval)
+  (kw_array)
+  (kw_json)
+  (kw_xml)
+] @type.builtin
+
+((Typename
+  (SimpleTypename
+    (GenericType
+      (type_function_name
+        (identifier) @type.builtin))))
+  (#match? @type.builtin "(?i)^(bigserial|bool|inet|jsonb|timestamptz|uuid|void)$"))
+
+; Constraint / DDL keywords
+[
+  (kw_primary)
+  (kw_key)
+  (kw_unique)
+  (kw_check)
+  (kw_foreign)
+  (kw_references)
+  (kw_constraint)
+  (kw_default)
+  (kw_collate)
+  (kw_not)
+] @keyword
+
+; Aggregate / window keywords
+[
+  (kw_over)
+  (kw_partition)
+  (kw_rows)
+  (kw_range)
+  (kw_groups)
+  (kw_preceding)
+  (kw_following)
+  (kw_unbounded)
+  (kw_current)
+] @keyword
+
+; Other common keywords
+[
+  (kw_to)
+  (kw_of)
+  (kw_cast)
+  (kw_do)
+  (kw_function)
+  (kw_procedure)
+  (kw_trigger)
+  (kw_temporary)
+  (kw_temp)
+  (kw_unlogged)
+  (kw_materialized)
+  (kw_schema)
+  (kw_database)
+  (kw_extension)
+  (kw_sequence)
+  (kw_domain)
+  (kw_type)
+  (kw_role)
+  (kw_user)
+  (kw_owner)
+  (kw_language)
+  (kw_replace)
+  (kw_returns)
+  (kw_security)
+  (kw_row)
+  (kw_column)
+  (kw_add)
+  (kw_rename)
+  (kw_no)
+  (kw_cycle)
+  (kw_increment)
+  (kw_maxvalue)
+  (kw_minvalue)
+  (kw_cache)
+  (kw_owned)
+  (kw_local)
+  (kw_global)
+  (kw_execute)
+  (kw_prepare)
+  (kw_deallocate)
+  (kw_listen)
+  (kw_notify)
+  (kw_load)
+  (kw_lock)
+  (kw_move)
+  (kw_cluster)
+  (kw_reindex)
+  (kw_reset)
+  (kw_show)
+  (kw_enable)
+  (kw_disable)
+  (kw_refresh)
+  (kw_concurrently)
+  (kw_import)
+  (kw_policy)
+  (kw_publication)
+  (kw_subscription)
+] @keyword
+"#;

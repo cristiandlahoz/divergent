@@ -158,6 +158,13 @@ static YAML_CONFIG: ConfigCell = Lazy::new(|| {
 });
 static XML_CONFIG: ConfigCell =
     Lazy::new(|| load_config(tree_sitter_xml::LANGUAGE_XML.into(), "xml", XML_HIGHLIGHTS));
+static POSTGRES_CONFIG: ConfigCell = Lazy::new(|| {
+    load_config(
+        tree_sitter_postgres::LANGUAGE.into(),
+        "postgres",
+        POSTGRES_HIGHLIGHTS,
+    )
+});
 
 pub static LANGUAGES: &[LanguageEntry] = &[
     LanguageEntry {
@@ -254,6 +261,11 @@ pub static LANGUAGES: &[LanguageEntry] = &[
         extensions: &["xml", "xsd", "xsl", "xslt", "svg"],
         exact_filenames: &[],
         config: &XML_CONFIG,
+    },
+    LanguageEntry {
+        extensions: &["sql", "psql"],
+        exact_filenames: &[],
+        config: &POSTGRES_CONFIG,
     },
 ];
 
